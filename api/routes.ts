@@ -38,7 +38,7 @@ function ensureDataFile() {
 function ensureConfigFile() {
   try {
     if (!fs.existsSync(CONFIG_FILE)) {
-      const defaultConfig = { spreadsheetId: null };
+      const defaultConfig = { spreadsheetId: null, googleScriptUrl: null };
       if (isVercel && fs.existsSync(BUNDLED_CONFIG_FILE)) {
         try {
           fs.copyFileSync(BUNDLED_CONFIG_FILE, CONFIG_FILE);
@@ -180,6 +180,41 @@ router.post("/register", (req, res) => {
     registrations.push(newTrainer);
     
     if (writeRegistrations(registrations)) {
+      // Sincronização automática em tempo real se o Google Script URL estiver configurado
+      try {
+        ensureConfigFile();
+        let googleScriptUrl = process.env.GOOGLE_SCRIPT_URL || null;
+        if (!googleScriptUrl && fs.existsSync(CONFIG_FILE)) {
+          const configData = fs.readFileSync(CONFIG_FILE, "utf-8");
+          const config = JSON.parse(configData);
+          googleScriptUrl = config.googleScriptUrl || null;
+        }
+
+        if (googleScriptUrl) {
+          console.log("Enviando cadastro automático para o Google Sheets via Web App:", googleScriptUrl);
+          fetch(googleScriptUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(newTrainer)
+          })
+          .then(async (syncRes) => {
+            if (syncRes.ok) {
+              console.log("Sincronização automática com Google Sheets concluída com sucesso!");
+            } else {
+              const text = await syncRes.text();
+              console.error("Falha na sincronização automática. Status:", syncRes.status, text);
+            }
+          })
+          .catch((fetchErr) => {
+            console.error("Erro na requisição de sincronização automática:", fetchErr);
+          });
+        }
+      } catch (syncErr) {
+        console.error("Falha ao disparar sincronização automática:", syncErr);
+      }
+
       return res.status(201).json({ success: true, data: newTrainer });
     } else {
       return res.status(500).json({ error: "Erro interno ao salvar os dados." });
@@ -202,15 +237,17 @@ router.get("/config", (req, res) => {
     ensureConfigFile();
     // 1. Check environment variable first
     let spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || null;
+    let googleScriptUrl = process.env.GOOGLE_SCRIPT_URL || null;
     
     // 2. Fallback to CONFIG_FILE if environment variable is not defined
-    if (!spreadsheetId && fs.existsSync(CONFIG_FILE)) {
+    if (fs.existsSync(CONFIG_FILE)) {
       const data = fs.readFileSync(CONFIG_FILE, "utf-8");
       const config = JSON.parse(data);
-      spreadsheetId = config.spreadsheetId || null;
+      if (!spreadsheetId) spreadsheetId = config.spreadsheetId || null;
+      if (!googleScriptUrl) googleScriptUrl = config.googleScriptUrl || null;
     }
     
-    res.json({ spreadsheetId });
+    res.json({ spreadsheetId, googleScriptUrl });
   } catch (error) {
     console.error("Error reading config:", error);
     res.status(500).json({ error: "Erro ao ler as configurações." });
@@ -221,10 +258,26 @@ router.get("/config", (req, res) => {
 router.post("/config", authenticateAdmin, (req, res) => {
   try {
     ensureConfigFile();
-    const { spreadsheetId } = req.body;
-    const config = { spreadsheetId: spreadsheetId || null };
+    const { spreadsheetId, googleScriptUrl } = req.body;
+    
+    let currentConfig = { spreadsheetId: null, googleScriptUrl: null };
+    if (fs.existsSync(CONFIG_FILE)) {
+      try {
+        currentConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+      } catch (e) {}
+    }
+    
+    const config = { 
+      spreadsheetId: spreadsheetId !== undefined ? spreadsheetId : currentConfig.spreadsheetId,
+      googleScriptUrl: googleScriptUrl !== undefined ? googleScriptUrl : currentConfig.googleScriptUrl
+    };
+    
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
-    res.json({ success: true, spreadsheetId: config.spreadsheetId });
+    res.json({ 
+      success: true, 
+      spreadsheetId: config.spreadsheetId, 
+      googleScriptUrl: config.googleScriptUrl 
+    });
   } catch (error) {
     console.error("Error writing config:", error);
     res.status(500).json({ error: "Erro ao salvar as configurações." });

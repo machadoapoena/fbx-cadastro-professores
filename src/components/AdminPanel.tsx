@@ -14,6 +14,75 @@ interface AdminPanelProps {
   onBackToForm: () => void;
 }
 
+const googleScriptCode = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+    
+    // Extrai os campos do profissional
+    var id = data.id || "";
+    var name = data.name || "";
+    var cpf = data.cpf || "";
+    var birthDate = data.birthDate || "";
+    var phone = data.phone || "";
+    var email = data.email || "";
+    var instagram = data.instagram || "";
+    var fideTitle = data.fideTitle || "Nenhuma";
+    var administrativeRegion = data.administrativeRegion || "";
+    
+    var pedagogical = "Não";
+    var highPerformance = "Não";
+    if (data.specialties) {
+      if (data.specialties.pedagogical) pedagogical = "Sim";
+      if (data.specialties.highPerformance) highPerformance = "Sim";
+    }
+    
+    var availability = "";
+    if (Array.isArray(data.availability)) {
+      availability = data.availability.map(function(a) {
+        if (a === "morning") return "Manhã";
+        if (a === "afternoon") return "Tarde";
+        if (a === "night") return "Noite";
+        return "Finais de Semana";
+      }).join(", ");
+    }
+    
+    var bio = data.bio || "";
+    var notes = data.notes || "";
+    var createdAtFormatted = "";
+    if (data.createdAt) {
+      createdAtFormatted = new Date(data.createdAt).toLocaleDateString("pt-BR");
+    } else {
+      createdAtFormatted = new Date().toLocaleDateString("pt-BR");
+    }
+    
+    // Adiciona uma linha na planilha com os campos mapeados
+    sheet.appendRow([
+      id,
+      name,
+      cpf,
+      birthDate,
+      phone,
+      email,
+      instagram,
+      fideTitle,
+      administrativeRegion,
+      pedagogical,
+      highPerformance,
+      availability,
+      bio,
+      notes,
+      createdAtFormatted
+    ]);
+    
+    return ContentService.createTextOutput(JSON.stringify({ "result": "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ "result": "error", "error": error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
 export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
@@ -37,6 +106,10 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
   const [googleToken, setGoogleToken] = useState<string | null>(null);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [spreadsheetName, setSpreadsheetName] = useState<string | null>(null);
+  const [googleScriptUrl, setGoogleScriptUrl] = useState<string | null>(null);
+  const [googleScriptUrlInput, setGoogleScriptUrlInput] = useState("");
+  const [showScriptInstructions, setShowScriptInstructions] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
   const [isSheetsLoading, setIsSheetsLoading] = useState(false);
   const [sheetsError, setSheetsError] = useState<string | null>(null);
   const [sheetsSuccess, setSheetsSuccess] = useState<string | null>(null);
@@ -48,6 +121,7 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       setToken(savedToken);
       setIsAuthenticated(true);
       fetchRegistrations(savedToken);
+      fetchGoogleConfig(); // Load spreadsheet configuration regardless of Google Auth
     }
 
     // Initialize Firebase Google Auth listener
@@ -72,6 +146,8 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       if (response.ok) {
         const config = await response.json();
         setSpreadsheetId(config.spreadsheetId || null);
+        setGoogleScriptUrl(config.googleScriptUrl || null);
+        setGoogleScriptUrlInput(config.googleScriptUrl || "");
         const activeToken = gToken || googleToken;
         if (config.spreadsheetId && activeToken) {
           fetchSpreadsheetDetails(config.spreadsheetId, activeToken);
@@ -335,6 +411,35 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       }
     } catch (err: any) {
       setSheetsError(err.message || "Erro ao desvincular a planilha.");
+    } finally {
+      setIsSheetsLoading(false);
+    }
+  };
+
+  const handleSaveGoogleScriptUrl = async (url: string) => {
+    setIsSheetsLoading(true);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+    try {
+      const cleanUrl = url.trim();
+      const saveRes = await fetch("/api/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ googleScriptUrl: cleanUrl || null })
+      });
+
+      if (saveRes.ok) {
+        setGoogleScriptUrl(cleanUrl || null);
+        setSheetsSuccess(cleanUrl ? "URL do Google Apps Script salva com sucesso! Sincronização automática em tempo real ativa." : "Sincronização automática desativada.");
+      } else {
+        throw new Error("Falha ao salvar a configuração no servidor.");
+      }
+    } catch (err: any) {
+      console.error("Save googleScriptUrl error:", err);
+      setSheetsError(err.message || "Não foi possível salvar o URL.");
     } finally {
       setIsSheetsLoading(false);
     }
@@ -1062,6 +1167,127 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
                 </p>
               </div>
             )}
+
+            {/* Sincronização Automática via Google Apps Script */}
+            <div className="mt-6 pt-6 border-t border-slate-100 space-y-4 text-left">
+              <div>
+                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Sincronização Automática em Tempo Real (Sem Autenticação)
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Como sua planilha é compartilhada publicamente para edição, você pode fazer com que cada novo cadastro caia nela <strong>instantaneamente e de forma automática</strong> sem precisar de login ou cliques extras!
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Cole aqui a URL da Web App do Google Apps Script (https://script.google.com/.../exec)"
+                  className="px-3 py-2 text-xs bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg flex-1 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-[#C5A880] focus:border-[#C5A880]"
+                  value={googleScriptUrlInput}
+                  onChange={(e) => setGoogleScriptUrlInput(e.target.value)}
+                />
+                <button
+                  onClick={() => handleSaveGoogleScriptUrl(googleScriptUrlInput)}
+                  disabled={isSheetsLoading}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shrink-0"
+                >
+                  {isSheetsLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    "Salvar URL"
+                  )}
+                </button>
+              </div>
+
+              {googleScriptUrl && (
+                <div className="text-xs text-slate-600 bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span>Sincronização em tempo real ativa! Novos cadastros cairão na planilha na hora.</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setGoogleScriptUrlInput("");
+                      handleSaveGoogleScriptUrl("");
+                    }}
+                    className="text-red-600 hover:text-red-700 font-semibold"
+                  >
+                    Desativar
+                  </button>
+                </div>
+              )}
+
+              {/* Toggle Instructions button */}
+              <div>
+                <button
+                  onClick={() => setShowScriptInstructions(!showScriptInstructions)}
+                  className="text-xs text-[#C5A880] hover:text-[#b59870] font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  {showScriptInstructions ? "Ocultar instruções de instalação" : "Como configurar o Google Apps Script na planilha? (Passo a passo rápido)"}
+                </button>
+              </div>
+
+              {showScriptInstructions && (
+                <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/50 space-y-4 text-xs text-slate-600 leading-relaxed">
+                  <div className="space-y-2">
+                    <p className="font-bold text-slate-700">Siga estes 5 passos simples:</p>
+                    <ol className="list-decimal pl-4 space-y-2">
+                      <li>
+                        No seu Google Sheets, clique no menu superior em <strong>Extensões</strong> (Extensions) e depois em <strong>Apps Script</strong>.
+                      </li>
+                      <li>
+                        Apague qualquer código que estiver lá e cole o seguinte código:
+                      </li>
+                    </ol>
+                  </div>
+
+                  {/* Code Block with Copy */}
+                  <div className="relative bg-slate-900 rounded-lg p-3 text-slate-300 font-mono text-[11px] overflow-x-auto max-h-60">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(googleScriptCode);
+                        setCopiedScript(true);
+                        setTimeout(() => setCopiedScript(false), 2000);
+                      }}
+                      className="absolute top-2 right-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] font-sans cursor-pointer"
+                    >
+                      {copiedScript ? "Copiado!" : "Copiar Código"}
+                    </button>
+                    <pre className="whitespace-pre">{googleScriptCode}</pre>
+                  </div>
+
+                  <div className="space-y-2">
+                    <ol className="list-decimal pl-4 space-y-2" start={3}>
+                      <li>
+                        Clique no botão azul <strong>Implantar</strong> (ou <strong>Deploy</strong>) no topo direito, selecione <strong>Nova implantação</strong> (New deployment).
+                      </li>
+                      <li>
+                        Clique na engrenagem ao lado de "Selecionar tipo" e escolha <strong>App da Web</strong> (Web App).
+                      </li>
+                      <li>
+                        Configure assim:
+                        <ul className="list-disc pl-4 mt-1 space-y-1">
+                          <li><strong>Descrição:</strong> Cadastro FBX</li>
+                          <li><strong>Executar como:</strong> Eu (seu e-mail)</li>
+                          <li><strong>Quem tem acesso:</strong> Qualquer um (ou "Anyone")</li>
+                        </ul>
+                      </li>
+                      <li>
+                        Clique em <strong>Implantar</strong>. O Google pedirá para autorizar o script (pode clicar em "Avançado" e "Acessar...").
+                      </li>
+                      <li>
+                        Copie a <strong>URL do App da Web</strong> gerada e cole no campo acima! Clique em "Salvar URL" e pronto!
+                      </li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Table Filters Panel */}
