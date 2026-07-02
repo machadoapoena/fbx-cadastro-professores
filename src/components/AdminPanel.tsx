@@ -512,8 +512,26 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       if (response.ok && resData.success) {
         setScriptTestResult({
           success: true,
-          message: "Conexão de teste estabelecida com sucesso! O Google Apps Script processou a chamada e inseriu uma linha de teste na planilha."
+          message: "Conexão de teste estabelecida com sucesso! O Google Apps Script processou a chamada, inseriu uma linha de teste na planilha, e a URL foi ativada automaticamente."
         });
+        
+        // Auto-save the URL on successful connection test
+        const cleanUrl = googleScriptUrlInput.trim();
+        try {
+          const saveRes = await fetch("/api/config", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ googleScriptUrl: cleanUrl || null })
+          });
+          if (saveRes.ok) {
+            setGoogleScriptUrl(cleanUrl || null);
+          }
+        } catch (saveErr) {
+          console.error("Failed to auto-save URL after test:", saveErr);
+        }
       } else {
         setScriptTestResult({
           success: false,

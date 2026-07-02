@@ -145,20 +145,23 @@ router.post("/register", async (req, res) => {
     // Read current database
     const registrations = readRegistrations();
 
-    // Check duplicate CPF
+    // Check duplicate CPF - instead of blocking, we will update the existing record
     const sanitizedCpf = cpf.replace(/\D/g, "");
-    const duplicate = registrations.find(
+    const duplicateIndex = registrations.findIndex(
       (r) => r.cpf.replace(/\D/g, "") === sanitizedCpf
     );
-    if (duplicate) {
-      return res.status(400).json({
-        error: "Este CPF já possui um cadastro ativo. Caso precise alterar, entre em contato com a federação.",
-      });
-    }
 
-    // Formulate new trainer
+    // Formulate trainer profile (update if duplicate, else create new)
+    const trainerId = duplicateIndex !== -1 
+      ? registrations[duplicateIndex].id 
+      : "tr_" + Math.random().toString(36).substring(2, 11);
+
+    const createdAt = duplicateIndex !== -1 
+      ? registrations[duplicateIndex].createdAt 
+      : new Date().toISOString();
+
     const newTrainer: TrainerRegistration = {
-      id: "tr_" + Math.random().toString(36).substring(2, 11),
+      id: trainerId,
       name: name.trim(),
       cpf: cpf.trim(),
       birthDate: birthDate ? birthDate.trim() : "",
@@ -174,10 +177,16 @@ router.post("/register", async (req, res) => {
       administrativeRegion,
       bio: bio ? bio.trim() : "",
       notes: notes ? notes.trim() : "",
-      createdAt: new Date().toISOString(),
+      createdAt: createdAt,
     };
 
-    registrations.push(newTrainer);
+    if (duplicateIndex !== -1) {
+      registrations[duplicateIndex] = newTrainer;
+      console.log(`Atualizando cadastro local para o CPF ${cpf}`);
+    } else {
+      registrations.push(newTrainer);
+      console.log(`Adicionando novo cadastro local para o CPF ${cpf}`);
+    }
     
     if (writeRegistrations(registrations)) {
       // Sincronização automática em tempo real se o Google Script URL estiver configurado
@@ -206,6 +215,8 @@ router.post("/register", async (req, res) => {
             const text = await syncRes.text();
             console.error("Falha na sincronização automática. Status:", syncRes.status, text);
           }
+        } else {
+          console.log("Google Script URL não configurado. Cadastro salvo apenas localmente.");
         }
       } catch (syncErr) {
         console.error("Falha ao disparar sincronização automática:", syncErr);
