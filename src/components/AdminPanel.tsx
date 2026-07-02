@@ -172,7 +172,15 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       }
     } catch (err: any) {
       console.error("Google sign in failed:", err);
-      setSheetsError("Falha na autenticação do Google. Tente novamente.");
+      if (err?.code === "auth/popup-closed-by-user" || err?.message?.includes("popup-closed-by-user")) {
+        setSheetsError(
+          "A janela de login do Google foi fechada ou bloqueada. Se o popup não abriu, por favor permita popups para este site nas configurações do seu navegador ou clique em 'Abrir em nova aba' (no canto superior direito da tela de visualização do AI Studio) para fazer o login sem restrições de iframe."
+        );
+      } else if (err?.code === "auth/cancelled-popup-request" || err?.message?.includes("cancelled-popup-request")) {
+        setSheetsError("Uma solicitação de login já está em andamento. Aguarde ou atualize a página.");
+      } else {
+        setSheetsError(`Falha na autenticação do Google: ${err?.message || "Tente novamente."}`);
+      }
     } finally {
       setIsSheetsLoading(false);
     }
