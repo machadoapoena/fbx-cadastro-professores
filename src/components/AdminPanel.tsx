@@ -3,10 +3,12 @@ import {
   Lock, ArrowLeft, Search, Filter, Trash2, Download, 
   Copy, FileSpreadsheet, Eye, User, Phone, Mail, Instagram, 
   MapPin, Calendar, BookOpen, Trophy, Award, Key, Loader2, 
-  CheckCircle, ChevronDown, Check, Send, AlertTriangle
+  CheckCircle, ChevronDown, Check, Send, AlertTriangle, ExternalLink, RefreshCw
 } from "lucide-react";
 import { TrainerRegistration } from "../types";
 import { REGIOES_ADMINISTRATIVAS } from "../utils/regions";
+import { initAuth, googleSignIn, logoutGoogle } from "../lib/firebase";
+import { User as FirebaseUser } from "firebase/auth";
 
 interface AdminPanelProps {
   onBackToForm: () => void;
@@ -30,7 +32,16 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
   const [filterSpecialty, setFilterSpecialty] = useState("all"); // 'all', 'pedagogical', 'highPerformance'
   const [filterTitle, setFilterTitle] = useState("");
 
-  // Load token from localStorage on mount
+  // Google Sheets Integration State
+  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(null);
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
+  const [spreadsheetName, setSpreadsheetName] = useState<string | null>(null);
+  const [isSheetsLoading, setIsSheetsLoading] = useState(false);
+  const [sheetsError, setSheetsError] = useState<string | null>(null);
+  const [sheetsSuccess, setSheetsSuccess] = useState<string | null>(null);
+
+  // Load token from localStorage on mount and init Firebase Auth
   useEffect(() => {
     const savedToken = localStorage.getItem("fbx_admin_token");
     if (savedToken) {
@@ -38,7 +49,54 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       setIsAuthenticated(true);
       fetchRegistrations(savedToken);
     }
+
+    // Initialize Firebase Google Auth listener
+    const unsubscribe = initAuth(
+      (user, gToken) => {
+        setGoogleUser(user);
+        setGoogleToken(gToken);
+        fetchGoogleConfig(gToken);
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleToken(null);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
+
+  const fetchGoogleConfig = async (gToken?: string) => {
+    try {
+      const response = await fetch("/api/config");
+      if (response.ok) {
+        const config = await response.json();
+        setSpreadsheetId(config.spreadsheetId || null);
+        const activeToken = gToken || googleToken;
+        if (config.spreadsheetId && activeToken) {
+          fetchSpreadsheetDetails(config.spreadsheetId, activeToken);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching Google config:", err);
+    }
+  };
+
+  const fetchSpreadsheetDetails = async (sheetId: string, accessToken: string) => {
+    try {
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=properties.title`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) {
+        const details = await res.json();
+        setSpreadsheetName(details.properties?.title || "Planilha do Google");
+      } else {
+        setSpreadsheetName("Planilha inacessível ou removida");
+      }
+    } catch (err) {
+      console.error("Error getting spreadsheet details:", err);
+    }
+  };
 
   const fetchRegistrations = async (authToken: string) => {
     setLoading(true);
@@ -98,6 +156,434 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
     setToken("");
     setIsAuthenticated(false);
     setData([]);
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsSheetsLoading(true);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setGoogleUser(result.user);
+        setGoogleToken(result.accessToken);
+        setSheetsSuccess(`Conta Google vinculada com sucesso: ${result.user.email}`);
+        fetchGoogleConfig(result.accessToken);
+      }
+    } catch (err: any) {
+      console.error("Google sign in failed:", err);
+      setSheetsError("Falha na autenticação do Google. Tente novamente.");
+    } finally {
+      setIsSheetsLoading(false);
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    try {
+      await logoutGoogle();
+      setGoogleUser(null);
+      setGoogleToken(null);
+      setSheetsSuccess("Conta Google desconectada.");
+    } catch (err) {
+      console.error("Google sign out failed:", err);
+    }
+  };
+
+  const handleCreateSpreadsheet = async () => {
+    if (!googleToken) return;
+    setIsSheetsLoading(true);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+    try {
+      const res = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${googleToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          properties: {
+            title: "Credenciamento de Professores - FBX"
+          },
+          sheets: [
+            {
+              properties: {
+                title: "Cadastros"
+              }
+            }
+          ]
+        })
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        const sheetId = result.spreadsheetId;
+        
+        // Save spreadsheetId on server config
+        const saveRes = await fetch("/api/config", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}` // server admin token
+          },
+          body: JSON.stringify({ spreadsheetId: sheetId })
+        });
+
+        if (saveRes.ok) {
+          setSpreadsheetId(sheetId);
+          setSpreadsheetName(result.properties?.title || "Credenciamento de Professores - FBX");
+          setSheetsSuccess("Planilha criada e vinculada com sucesso no seu Google Drive!");
+        } else {
+          throw new Error("Falha ao salvar a configuração da planilha no servidor.");
+        }
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error?.message || "Falha ao criar planilha no Google Drive.");
+      }
+    } catch (err: any) {
+      console.error("Create spreadsheet error:", err);
+      setSheetsError(err.message || "Ocorreu um erro ao criar a planilha.");
+    } finally {
+      setIsSheetsLoading(false);
+    }
+  };
+
+  const handleLinkExistingSpreadsheet = async (sheetIdInput: string) => {
+    if (!googleToken) return;
+    let sheetId = sheetIdInput.trim();
+    if (sheetId.includes("docs.google.com/spreadsheets")) {
+      const match = sheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (match) sheetId = match[1];
+    }
+
+    if (!sheetId) {
+      setSheetsError("ID ou URL da planilha inválido.");
+      return;
+    }
+
+    setIsSheetsLoading(true);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+
+    try {
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=properties.title`, {
+        headers: { Authorization: `Bearer ${googleToken}` },
+      });
+
+      if (!res.ok) {
+        throw new Error("Planilha não encontrada ou você não possui permissão de leitura.");
+      }
+
+      const details = await res.json();
+      
+      const saveRes = await fetch("/api/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ spreadsheetId: sheetId })
+      });
+
+      if (saveRes.ok) {
+        setSpreadsheetId(sheetId);
+        setSpreadsheetName(details.properties?.title || "Planilha Vinculada");
+        setSheetsSuccess("Planilha vinculada com sucesso!");
+      } else {
+        throw new Error("Falha ao salvar a configuração da planilha no servidor.");
+      }
+    } catch (err: any) {
+      console.error("Link spreadsheet error:", err);
+      setSheetsError(err.message || "Não foi possível vincular a planilha.");
+    } finally {
+      setIsSheetsLoading(false);
+    }
+  };
+
+  const handleUnlinkSpreadsheet = async () => {
+    const confirmed = window.confirm("Tem certeza que deseja desvincular a planilha atual? Os cadastros permanecerão no seu Google Drive, mas a sincronização automática será desativada.");
+    if (!confirmed) return;
+
+    setIsSheetsLoading(true);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+
+    try {
+      const saveRes = await fetch("/api/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ spreadsheetId: null })
+      });
+
+      if (saveRes.ok) {
+        setSpreadsheetId(null);
+        setSpreadsheetName(null);
+        setSheetsSuccess("Planilha desvinculada com sucesso.");
+      } else {
+        throw new Error("Falha ao salvar a configuração no servidor.");
+      }
+    } catch (err: any) {
+      setSheetsError(err.message || "Erro ao desvincular a planilha.");
+    } finally {
+      setIsSheetsLoading(false);
+    }
+  };
+
+  const handleExportToGoogleSheets = async () => {
+    if (!googleToken || !spreadsheetId) return;
+
+    const confirmed = window.confirm(
+      "Deseja realmente exportar todos os cadastros para a planilha conectada? Isto irá limpar o conteúdo existente na planilha e escrever os registros atuais."
+    );
+    if (!confirmed) return;
+
+    setIsSheetsLoading(true);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+
+    try {
+      let sheetName = "Cadastros";
+      
+      const metadataRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`, {
+        headers: { Authorization: `Bearer ${googleToken}` }
+      });
+      if (metadataRes.ok) {
+        const metadata = await metadataRes.json();
+        const firstSheetTitle = metadata.sheets?.[0]?.properties?.title;
+        if (firstSheetTitle) {
+          sheetName = firstSheetTitle;
+        }
+      }
+
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:O1000:clear`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${googleToken}` }
+        }
+      );
+
+      const headers = [
+        "ID", 
+        "Nome Completo", 
+        "CPF", 
+        "Data de Nascimento", 
+        "Telefone", 
+        "E-mail", 
+        "Instagram", 
+        "Titulação FIDE", 
+        "Região Administrativa", 
+        "Pedagógico (Sim/Não)", 
+        "Alto Rendimento (Sim/Não)", 
+        "Disponibilidade", 
+        "Currículo/Bio", 
+        "Observações", 
+        "Data Cadastro"
+      ];
+
+      const rows = data.map((item) => [
+        item.id,
+        item.name,
+        item.cpf,
+        item.birthDate || "",
+        item.phone,
+        item.email,
+        item.instagram || "",
+        item.fideTitle || "Nenhuma",
+        item.administrativeRegion,
+        item.specialties.pedagogical ? "Sim" : "Não",
+        item.specialties.highPerformance ? "Sim" : "Não",
+        item.availability.map(a => a === "morning" ? "Manhã" : a === "afternoon" ? "Tarde" : a === "night" ? "Noite" : "Finais de Semana").join(", "),
+        item.bio || "",
+        item.notes || "",
+        item.createdAt ? new Date(item.createdAt).toLocaleDateString("pt-BR") : ""
+      ]);
+
+      const valueRange = {
+        range: `${sheetName}!A1:O${data.length + 1}`,
+        majorDimension: "ROWS",
+        values: [headers, ...rows]
+      };
+
+      const putRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:O${data.length + 1}?valueInputOption=USER_ENTERED`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${googleToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(valueRange)
+        }
+      );
+
+      if (putRes.ok) {
+        setSheetsSuccess(`Sincronização concluída com sucesso! ${data.length} cadastros exportados para a planilha.`);
+      } else {
+        const errData = await putRes.json();
+        throw new Error(errData.error?.message || "Falha ao gravar os dados na planilha.");
+      }
+    } catch (err: any) {
+      console.error("Export to Sheets error:", err);
+      setSheetsError(err.message || "Erro ao exportar dados para o Google Sheets.");
+    } finally {
+      setIsSheetsLoading(false);
+    }
+  };
+
+  const handleImportFromGoogleSheets = async () => {
+    if (!googleToken || !spreadsheetId) return;
+
+    const confirmed = window.confirm(
+      "Deseja realmente ler e importar todos os cadastros da planilha do Google? Isto irá atualizar o banco de dados do aplicativo com todas as linhas, novos registros ou alterações feitas diretamente na planilha."
+    );
+    if (!confirmed) return;
+
+    setIsSheetsLoading(true);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+
+    try {
+      let sheetName = "Cadastros";
+      const metadataRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`, {
+        headers: { Authorization: `Bearer ${googleToken}` }
+      });
+      if (metadataRes.ok) {
+        const metadata = await metadataRes.json();
+        const firstSheetTitle = metadata.sheets?.[0]?.properties?.title;
+        if (firstSheetTitle) {
+          sheetName = firstSheetTitle;
+        }
+      }
+
+      const res = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2:O1000`,
+        {
+          headers: { Authorization: `Bearer ${googleToken}` }
+        }
+      );
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error?.message || "Não foi possível ler as linhas da planilha.");
+      }
+
+      const result = await res.json();
+      const rows = result.values || [];
+
+      if (rows.length === 0) {
+        throw new Error("Nenhum cadastro encontrado na planilha (as linhas de dados estão vazias).");
+      }
+
+      const importedRegistrations: TrainerRegistration[] = rows.map((row: any[]) => {
+        const id = row[0] && row[0].toString().trim().startsWith("tr_") 
+          ? row[0].toString().trim() 
+          : "tr_" + Math.random().toString(36).substring(2, 11);
+        
+        const name = row[1] ? row[1].toString().trim() : "";
+        const cpf = row[2] ? row[2].toString().trim() : "";
+        
+        const birthDateRaw = row[3] ? row[3].toString().trim() : "";
+        let birthDate = "";
+        if (birthDateRaw) {
+          if (birthDateRaw.includes("/")) {
+            const parts = birthDateRaw.split("/");
+            if (parts.length === 3) {
+              birthDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+            }
+          } else if (birthDateRaw.includes("-")) {
+            birthDate = birthDateRaw;
+          }
+        }
+
+        const phone = row[4] ? row[4].toString().trim() : "";
+        const email = row[5] ? row[5].toString().trim().toLowerCase() : "";
+        const instagram = row[6] ? row[6].toString().trim() : "";
+        const fideTitle = row[7] ? row[7].toString().trim() : "Nenhuma";
+        const administrativeRegion = row[8] ? row[8].toString().trim() : "";
+        
+        const pedagogical = row[9] ? row[9].toString().trim().toLowerCase() === "sim" : false;
+        const highPerformance = row[10] ? row[10].toString().trim().toLowerCase() === "sim" : false;
+
+        const availabilityRaw = row[11] ? row[11].toString().trim() : "";
+        const availability: string[] = [];
+        if (availabilityRaw) {
+          const parts = availabilityRaw.split(",").map((s) => s.trim().toLowerCase());
+          if (parts.some((p) => p.includes("manhã"))) availability.push("morning");
+          if (parts.some((p) => p.includes("tarde"))) availability.push("afternoon");
+          if (parts.some((p) => p.includes("noite"))) availability.push("night");
+          if (parts.some((p) => p.includes("final") || p.includes("fim"))) availability.push("weekend");
+        }
+
+        const bio = row[12] ? row[12].toString().trim() : "";
+        const notes = row[13] ? row[13].toString().trim() : "";
+        
+        const createdAtRaw = row[14] ? row[14].toString().trim() : "";
+        let createdAt = new Date().toISOString();
+        if (createdAtRaw) {
+          if (createdAtRaw.includes("/")) {
+            const parts = createdAtRaw.split("/");
+            if (parts.length === 3) {
+              createdAt = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`).toISOString();
+            }
+          } else {
+            const parsed = Date.parse(createdAtRaw);
+            if (!isNaN(parsed)) {
+              createdAt = new Date(parsed).toISOString();
+            }
+          }
+        }
+
+        return {
+          id,
+          name,
+          cpf,
+          birthDate,
+          phone,
+          email,
+          instagram,
+          fideTitle,
+          specialties: {
+            pedagogical,
+            highPerformance
+          },
+          availability,
+          administrativeRegion,
+          bio,
+          notes,
+          createdAt
+        };
+      }).filter((item) => item.name && item.cpf);
+
+      if (importedRegistrations.length === 0) {
+        throw new Error("Não foi possível mapear nenhum cadastro válido da planilha. Certifique-se de que os campos Nome e CPF estão preenchidos.");
+      }
+
+      const syncRes = await fetch("/api/registrations/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ registrations: importedRegistrations })
+      });
+
+      if (syncRes.ok) {
+        setData(importedRegistrations);
+        setSheetsSuccess(`Importação concluída! Sincronizados ${importedRegistrations.length} cadastros da planilha para o banco local.`);
+      } else {
+        const errData = await syncRes.json();
+        throw new Error(errData.error || "Erro ao salvar os registros importados no servidor.");
+      }
+    } catch (err: any) {
+      console.error("Import from Sheets error:", err);
+      setSheetsError(err.message || "Erro ao importar dados do Google Sheets.");
+    } finally {
+      setIsSheetsLoading(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -387,6 +873,188 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
               </div>
             </div>
           )}
+
+          {/* GOOGLE SHEETS INTEGRATION CARD */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] space-y-4" id="google-sheets-card">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-bold italic text-slate-900">Sincronização Google Sheets</h3>
+                  <p className="text-xs text-slate-500">Conecte sua conta Google para salvar e ler os dados de uma planilha</p>
+                </div>
+              </div>
+
+              {googleUser ? (
+                <div className="flex items-center gap-3 self-end sm:self-auto">
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block font-mono">Conectado como</span>
+                    <span className="text-xs font-semibold text-slate-700">{googleUser.email}</span>
+                  </div>
+                  <button
+                    onClick={handleGoogleLogout}
+                    className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                  >
+                    Desconectar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={isSheetsLoading}
+                  className="gsi-material-button self-start sm:self-auto"
+                  style={{ margin: 0 }}
+                >
+                  <div className="gsi-material-button-state"></div>
+                  <div className="gsi-material-button-content-wrapper">
+                    <div className="gsi-material-button-icon">
+                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: "block" }}>
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                        <path fill="none" d="M0 0h48v48H0z"></path>
+                      </svg>
+                    </div>
+                    <span className="gsi-material-button-contents text-xs font-bold">Vincular Conta Google</span>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {sheetsError && (
+              <div className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>{sheetsError}</div>
+              </div>
+            )}
+
+            {sheetsSuccess && (
+              <div className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                <div>{sheetsSuccess}</div>
+              </div>
+            )}
+
+            {googleUser ? (
+              <div className="space-y-4">
+                {spreadsheetId ? (
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[9px] uppercase font-bold tracking-wider text-[#C5A880] font-mono block">Planilha Vinculada</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-sm text-slate-800">{spreadsheetName || "Carregando..."}</span>
+                        <a
+                          href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-slate-400 hover:text-slate-600 inline-flex items-center"
+                          title="Abrir planilha em nova guia"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block font-mono truncate max-w-md">ID: {spreadsheetId}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={handleExportToGoogleSheets}
+                        disabled={isSheetsLoading || data.length === 0}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                        title="Sobrescrever planilha com dados do app"
+                      >
+                        {isSheetsLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5 rotate-45" />
+                        )}
+                        Exportar p/ Google Sheets
+                      </button>
+                      <button
+                        onClick={handleImportFromGoogleSheets}
+                        disabled={isSheetsLoading}
+                        className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                        title="Carregar dados da planilha para o app"
+                      >
+                        {isSheetsLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                        Importar do Google Sheets
+                      </button>
+                      <button
+                        onClick={handleUnlinkSpreadsheet}
+                        disabled={isSheetsLoading}
+                        className="px-2.5 py-2 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold rounded-lg text-xs cursor-pointer transition-colors border border-transparent hover:border-red-100"
+                      >
+                        Desvincular Planilha
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 text-center space-y-4">
+                    <div className="max-w-md mx-auto space-y-1.5">
+                      <p className="text-sm font-bold text-slate-700">Nenhuma planilha vinculada para sincronização</p>
+                      <p className="text-xs text-slate-500">
+                        Crie uma nova planilha no seu Google Drive com um clique, ou cole o ID de uma planilha que você já possui para vinculá-la.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-3 flex-wrap max-w-lg mx-auto">
+                      <button
+                        onClick={handleCreateSpreadsheet}
+                        disabled={isSheetsLoading}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-all flex items-center gap-1.5"
+                      >
+                        {isSheetsLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                        )}
+                        Criar Nova Planilha
+                      </button>
+
+                      <div className="h-4 w-[1px] bg-slate-300 hidden sm:block" />
+
+                      <div className="flex items-center gap-1 w-full sm:w-auto">
+                        <input
+                          type="text"
+                          placeholder="ID ou link do Google Sheets"
+                          className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg w-full sm:w-48 focus:outline-hidden focus:ring-1 focus:ring-[#C5A880] focus:border-[#C5A880]"
+                          id="existing-sheet-input"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleLinkExistingSpreadsheet((e.target as HTMLInputElement).value);
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            const el = document.getElementById("existing-sheet-input") as HTMLInputElement;
+                            if (el) handleLinkExistingSpreadsheet(el.value);
+                          }}
+                          disabled={isSheetsLoading}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-all"
+                        >
+                          Vincular ID
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-center">
+                <p className="text-xs text-slate-500">
+                  Vincule sua conta Google para salvar os cadastros de professores diretamente no Google Drive e ler as alterações feitas lá.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Table Filters Panel */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.01)] space-y-4" id="filters-container">

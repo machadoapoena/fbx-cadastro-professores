@@ -7,6 +7,7 @@ import { TrainerRegistration } from "./src/types";
 const app = express();
 const PORT = 3000;
 const DATA_FILE = path.join(process.cwd(), "registrations.json");
+const CONFIG_FILE = path.join(process.cwd(), "config.json");
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "fbx2026";
 
 // Ensure data file exists with empty array
@@ -16,6 +17,16 @@ if (!fs.existsSync(DATA_FILE)) {
     console.log("Initialized registrations.json");
   } catch (error) {
     console.error("Error creating registrations.json:", error);
+  }
+}
+
+// Ensure config file exists with empty spreadsheetId
+if (!fs.existsSync(CONFIG_FILE)) {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ spreadsheetId: null }, null, 2), "utf-8");
+    console.log("Initialized config.json");
+  } catch (error) {
+    console.error("Error creating config.json:", error);
   }
 }
 
@@ -159,6 +170,53 @@ app.post("/api/register", (req, res) => {
 app.get("/api/registrations", authenticateAdmin, (req, res) => {
   const registrations = readRegistrations();
   res.json(registrations);
+});
+
+// Get spreadsheet configuration
+app.get("/api/config", (req, res) => {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) {
+      return res.json({ spreadsheetId: null });
+    }
+    const data = fs.readFileSync(CONFIG_FILE, "utf-8");
+    const config = JSON.parse(data);
+    res.json(config);
+  } catch (error) {
+    console.error("Error reading config:", error);
+    res.status(500).json({ error: "Erro ao ler as configurações." });
+  }
+});
+
+// Update spreadsheet configuration (requires authentication)
+app.post("/api/config", authenticateAdmin, (req, res) => {
+  try {
+    const { spreadsheetId } = req.body;
+    const config = { spreadsheetId: spreadsheetId || null };
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+    res.json({ success: true, spreadsheetId: config.spreadsheetId });
+  } catch (error) {
+    console.error("Error writing config:", error);
+    res.status(500).json({ error: "Erro ao salvar as configurações." });
+  }
+});
+
+// Sync/Replace all registrations (requires authentication)
+app.post("/api/registrations/sync", authenticateAdmin, (req, res) => {
+  try {
+    const { registrations } = req.body;
+    if (!Array.isArray(registrations)) {
+      return res.status(400).json({ error: "Dados inválidos. Esperava-se uma lista de registros." });
+    }
+    
+    if (writeRegistrations(registrations)) {
+      res.json({ success: true, count: registrations.length });
+    } else {
+      res.status(500).json({ error: "Erro ao atualizar o arquivo de registros." });
+    }
+  } catch (error) {
+    console.error("Error syncing registrations:", error);
+    res.status(500).json({ error: "Erro interno no servidor." });
+  }
 });
 
 // Delete a registration (requires authentication)
