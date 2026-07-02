@@ -65,7 +65,7 @@ export default function App() {
           <div className="h-[1px] bg-slate-800 w-full" />
           <div className="flex items-center gap-3">
             <img 
-              src="/fbx_logo.png" 
+              src="/logo_fbx.png" 
               alt="FBX Logo Footer" 
               className="h-10 w-10 object-contain bg-white p-0.5 rounded-lg shrink-0" 
               referrerPolicy="no-referrer"
