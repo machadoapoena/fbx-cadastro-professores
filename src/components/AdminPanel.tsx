@@ -160,11 +160,13 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
   // Load token from localStorage on mount and init Firebase Auth
   useEffect(() => {
     const savedToken = localStorage.getItem("fbx_admin_token");
+    let currentFbxToken = "";
     if (savedToken) {
       setToken(savedToken);
       setIsAuthenticated(true);
+      currentFbxToken = savedToken;
       fetchRegistrations(savedToken);
-      fetchGoogleConfig(); // Load spreadsheet configuration regardless of Google Auth
+      fetchGoogleConfig(undefined, savedToken); // Load spreadsheet configuration regardless of Google Auth
     }
 
     // Initialize Firebase Google Auth listener
@@ -172,7 +174,7 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       (user, gToken) => {
         setGoogleUser(user);
         setGoogleToken(gToken);
-        fetchGoogleConfig(gToken);
+        fetchGoogleConfig(gToken, currentFbxToken || token);
       },
       () => {
         setGoogleUser(null);
@@ -181,9 +183,9 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [token]);
 
-  const fetchGoogleConfig = async (gToken?: string) => {
+  const fetchGoogleConfig = async (gToken?: string, fbxAuthToken?: string) => {
     try {
       const response = await fetch("/api/config");
       if (response.ok) {
@@ -192,8 +194,12 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
         setGoogleScriptUrl(config.googleScriptUrl || null);
         setGoogleScriptUrlInput(config.googleScriptUrl || "");
         const activeToken = gToken || googleToken;
+        const activeFbxToken = fbxAuthToken || token;
         if (config.spreadsheetId && activeToken) {
           fetchSpreadsheetDetails(config.spreadsheetId, activeToken);
+          if (activeFbxToken) {
+            autoSyncFromGoogleSheets(config.spreadsheetId, activeToken, activeFbxToken);
+          }
         }
       }
     } catch (err) {
@@ -214,6 +220,134 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       }
     } catch (err) {
       console.error("Error getting spreadsheet details:", err);
+    }
+  };
+
+  const autoSyncFromGoogleSheets = async (sheetId: string, accessToken: string, fbxAuthToken: string) => {
+    if (!sheetId || !accessToken || !fbxAuthToken) return;
+    try {
+      let sheetName = "Cadastros";
+      const metadataRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (metadataRes.ok) {
+        const metadata = await metadataRes.json();
+        const firstSheetTitle = metadata.sheets?.[0]?.properties?.title;
+        if (firstSheetTitle) {
+          sheetName = firstSheetTitle;
+        }
+      }
+
+      const res = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(sheetName)}!A2:O1000`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }
+      );
+
+      if (!res.ok) return;
+
+      const result = await res.json();
+      const rows = result.values || [];
+      if (rows.length === 0) return;
+
+      const importedRegistrations: TrainerRegistration[] = rows.map((row: any[]) => {
+        const id = row[0] && row[0].toString().trim().startsWith("tr_") 
+          ? row[0].toString().trim() 
+          : "tr_" + Math.random().toString(36).substring(2, 11);
+        
+        const name = row[1] ? row[1].toString().trim() : "";
+        const cpf = row[2] ? row[2].toString().trim() : "";
+        
+        const birthDateRaw = row[3] ? row[3].toString().trim() : "";
+        let birthDate = "";
+        if (birthDateRaw) {
+          if (birthDateRaw.includes("/")) {
+            const parts = birthDateRaw.split("/");
+            if (parts.length === 3) {
+              birthDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+            }
+          } else if (birthDateRaw.includes("-")) {
+            birthDate = birthDateRaw;
+          }
+        }
+
+        const phone = row[4] ? row[4].toString().trim() : "";
+        const email = row[5] ? row[5].toString().trim().toLowerCase() : "";
+        const instagram = row[6] ? row[6].toString().trim() : "";
+        const fideTitle = row[7] ? row[7].toString().trim() : "Nenhuma";
+        const administrativeRegion = row[8] ? row[8].toString().trim() : "";
+        
+        const pedagogical = row[9] ? row[9].toString().trim().toLowerCase() === "sim" : false;
+        const highPerformance = row[10] ? row[10].toString().trim().toLowerCase() === "sim" : false;
+
+        const availabilityRaw = row[11] ? row[11].toString().trim() : "";
+        const availability: string[] = [];
+        if (availabilityRaw) {
+          const parts = availabilityRaw.split(",").map((s) => s.trim().toLowerCase());
+          if (parts.some((p) => p.includes("manhã"))) availability.push("morning");
+          if (parts.some((p) => p.includes("tarde"))) availability.push("afternoon");
+          if (parts.some((p) => p.includes("noite"))) availability.push("night");
+          if (parts.some((p) => p.includes("final") || p.includes("fim"))) availability.push("weekend");
+        }
+
+        const bio = row[12] ? row[12].toString().trim() : "";
+        const notes = row[13] ? row[13].toString().trim() : "";
+        
+        const createdAtRaw = row[14] ? row[14].toString().trim() : "";
+        let createdAt = new Date().toISOString();
+        if (createdAtRaw) {
+          if (createdAtRaw.includes("/")) {
+            const parts = createdAtRaw.split("/");
+            if (parts.length === 3) {
+              createdAt = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`).toISOString();
+            }
+          } else {
+            const parsed = Date.parse(createdAtRaw);
+            if (!isNaN(parsed)) {
+              createdAt = new Date(parsed).toISOString();
+            }
+          }
+        }
+
+        return {
+          id,
+          name,
+          cpf,
+          birthDate,
+          phone,
+          email,
+          instagram,
+          fideTitle,
+          specialties: {
+            pedagogical,
+            highPerformance
+          },
+          availability,
+          administrativeRegion,
+          bio,
+          notes,
+          createdAt
+        };
+      }).filter((item) => item.name && item.cpf);
+
+      if (importedRegistrations.length === 0) return;
+
+      const syncRes = await fetch("/api/registrations/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${fbxAuthToken}`
+        },
+        body: JSON.stringify({ registrations: importedRegistrations })
+      });
+
+      if (syncRes.ok) {
+        setData(importedRegistrations);
+        console.log(`Auto-synchronized ${importedRegistrations.length} registrations silently from Google Sheets.`);
+      }
+    } catch (err) {
+      console.error("Auto sync error:", err);
     }
   };
 
@@ -1439,6 +1573,29 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
 
               {/* Action Buttons to Export */}
               <div className="flex items-center gap-2 flex-wrap">
+                {googleToken && spreadsheetId && (
+                  <button
+                    onClick={async () => {
+                      setIsSheetsLoading(true);
+                      setSheetsError(null);
+                      setSheetsSuccess(null);
+                      try {
+                        await autoSyncFromGoogleSheets(spreadsheetId, googleToken, token);
+                        setSheetsSuccess("Lista de talentos sincronizada com a planilha com sucesso!");
+                      } catch (err: any) {
+                        setSheetsError(err.message || "Falha ao sincronizar.");
+                      } finally {
+                        setIsSheetsLoading(false);
+                      }
+                    }}
+                    disabled={isSheetsLoading}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    title="Carregar dados em tempo real da planilha conectada"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSheetsLoading ? "animate-spin" : ""}`} />
+                    Atualizar da Planilha
+                  </button>
+                )}
                 <button
                   onClick={handleCopyToClipboard}
                   disabled={filteredData.length === 0}
