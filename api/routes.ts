@@ -291,6 +291,163 @@ router.post("/config", authenticateAdmin, (req, res) => {
   }
 });
 
+// Shared helper to parse CSV from Google Sheets and sync locally
+async function parseAndSyncSpreadsheet(spreadsheetId: string): Promise<TrainerRegistration[]> {
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
+  console.log(`Buscando dados da planilha via CSV: ${csvUrl}`);
+  
+  const response = await fetch(csvUrl);
+  if (!response.ok) {
+    throw new Error("Não foi possível baixar os dados da planilha. Verifique se a planilha está compartilhada como 'Qualquer pessoa com o link pode ler' (Leitor).");
+  }
+
+  const csvText = await response.text();
+  
+  // Auto-detect separator: commas vs semicolons
+  const sample = csvText.slice(0, 1000);
+  const commaCount = (sample.match(/,/g) || []).length;
+  const semicolonCount = (sample.match(/;/g) || []).length;
+  const separator = semicolonCount > commaCount ? ';' : ',';
+
+  // Parse CSV rows
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let inQuotes = false;
+  let currentVal = "";
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentVal += '"';
+        i++; // skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === separator && !inQuotes) {
+      currentRow.push(currentVal);
+      currentVal = "";
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++; // skip \n
+      }
+      currentRow.push(currentVal);
+      if (currentRow.length > 0 && currentRow.some(cell => cell.trim() !== "")) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentVal = "";
+    } else {
+      currentVal += char;
+    }
+  }
+  if (currentRow.length > 0 || currentVal !== "") {
+    currentRow.push(currentVal);
+    if (currentRow.some(cell => cell.trim() !== "")) {
+      rows.push(currentRow);
+    }
+  }
+
+  if (rows.length <= 1) {
+    return [];
+  }
+
+  // Skip header row
+  const rowsWithoutHeader = rows.slice(1);
+  const importedRegistrations: TrainerRegistration[] = [];
+
+  for (const row of rowsWithoutHeader) {
+    if (row.length < 3) continue;
+
+    const name = row[1] ? row[1].trim() : "";
+    const cpf = row[2] ? row[2].trim() : "";
+    if (!name || !cpf) continue; // Skip empty rows
+
+    const id = row[0] && row[0].trim().startsWith("tr_") 
+      ? row[0].trim() 
+      : "tr_" + Math.random().toString(36).substring(2, 11);
+
+    const birthDateRaw = row[3] ? row[3].trim() : "";
+    let birthDate = "";
+    if (birthDateRaw) {
+      if (birthDateRaw.includes("/")) {
+        const parts = birthDateRaw.split("/");
+        if (parts.length === 3) {
+          birthDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
+      } else if (birthDateRaw.includes("-")) {
+        birthDate = birthDateRaw;
+      }
+    }
+
+    const phone = row[4] ? row[4].trim() : "";
+    const email = row[5] ? row[5].trim().toLowerCase() : "";
+    const instagram = row[6] ? row[6].trim() : "";
+    const fideTitle = row[7] ? row[7].trim() : "Nenhuma";
+    const administrativeRegion = row[8] ? row[8].trim() : "";
+    
+    const pedagogical = row[9] ? row[9].trim().toLowerCase() === "sim" : false;
+    const highPerformance = row[10] ? row[10].trim().toLowerCase() === "sim" : false;
+
+    const availabilityRaw = row[11] ? row[11].trim() : "";
+    const availability: string[] = [];
+    if (availabilityRaw) {
+      const parts = availabilityRaw.split(",").map((s) => s.trim().toLowerCase());
+      if (parts.some((p) => p.includes("manhã") || p.includes("morning"))) availability.push("morning");
+      if (parts.some((p) => p.includes("tarde") || p.includes("afternoon"))) availability.push("afternoon");
+      if (parts.some((p) => p.includes("noite") || p.includes("night"))) availability.push("night");
+      if (parts.some((p) => p.includes("final") || p.includes("fim") || p.includes("fins") || p.includes("weekend") || p.includes("sábado") || p.includes("domingo"))) availability.push("weekend");
+    }
+
+    const bio = row[12] ? row[12].trim() : "";
+    const notes = row[13] ? row[13].trim() : "";
+    
+    const createdAtRaw = row[14] ? row[14].trim() : "";
+    let createdAt = new Date().toISOString();
+    if (createdAtRaw) {
+      if (createdAtRaw.includes("/")) {
+        const parts = createdAtRaw.split("/");
+        if (parts.length === 3) {
+          createdAt = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`).toISOString();
+        }
+      } else {
+        const parsed = Date.parse(createdAtRaw);
+        if (!isNaN(parsed)) {
+          createdAt = new Date(parsed).toISOString();
+        }
+      }
+    }
+
+    importedRegistrations.push({
+      id,
+      name,
+      cpf,
+      birthDate,
+      phone,
+      email,
+      instagram,
+      fideTitle,
+      specialties: {
+        pedagogical,
+        highPerformance
+      },
+      availability,
+      administrativeRegion,
+      bio,
+      notes,
+      createdAt
+    });
+  }
+
+  if (importedRegistrations.length > 0) {
+    writeRegistrations(importedRegistrations);
+  }
+
+  return importedRegistrations;
+}
+
 // Sync registrations directly from Google Sheets via CSV export (no client-side OAuth token required)
 router.post("/config/sync-from-sheet", authenticateAdmin, async (req, res) => {
   try {
@@ -309,159 +466,10 @@ router.post("/config/sync-from-sheet", authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: "Nenhuma planilha vinculada nas configurações do sistema." });
     }
 
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
-    console.log(`Buscando dados da planilha via CSV: ${csvUrl}`);
-    
-    const response = await fetch(csvUrl);
-    if (!response.ok) {
-      return res.status(400).json({ 
-        error: "Não foi possível baixar os dados da planilha. Verifique se a planilha está compartilhada como 'Qualquer pessoa com o link pode ler' (Leitor)." 
-      });
-    }
-
-    const csvText = await response.text();
-    
-    // Auto-detect separator: commas vs semicolons
-    const sample = csvText.slice(0, 1000);
-    const commaCount = (sample.match(/,/g) || []).length;
-    const semicolonCount = (sample.match(/;/g) || []).length;
-    const separator = semicolonCount > commaCount ? ';' : ',';
-
-    // Parse CSV rows
-    const rows: string[][] = [];
-    let currentRow: string[] = [];
-    let inQuotes = false;
-    let currentVal = "";
-
-    for (let i = 0; i < csvText.length; i++) {
-      const char = csvText[i];
-      const nextChar = csvText[i + 1];
-
-      if (char === '"') {
-        if (inQuotes && nextChar === '"') {
-          currentVal += '"';
-          i++; // skip next quote
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === separator && !inQuotes) {
-        currentRow.push(currentVal);
-        currentVal = "";
-      } else if ((char === '\r' || char === '\n') && !inQuotes) {
-        if (char === '\r' && nextChar === '\n') {
-          i++; // skip \n
-        }
-        currentRow.push(currentVal);
-        if (currentRow.length > 0 && currentRow.some(cell => cell.trim() !== "")) {
-          rows.push(currentRow);
-        }
-        currentRow = [];
-        currentVal = "";
-      } else {
-        currentVal += char;
-      }
-    }
-    if (currentRow.length > 0 || currentVal !== "") {
-      currentRow.push(currentVal);
-      if (currentRow.some(cell => cell.trim() !== "")) {
-        rows.push(currentRow);
-      }
-    }
-
-    if (rows.length <= 1) {
-      return res.json({ success: true, count: 0, message: "A planilha está vazia ou contém apenas o cabeçalho." });
-    }
-
-    // Skip header row
-    const rowsWithoutHeader = rows.slice(1);
-    const importedRegistrations: TrainerRegistration[] = [];
-
-    for (const row of rowsWithoutHeader) {
-      if (row.length < 3) continue;
-
-      const name = row[1] ? row[1].trim() : "";
-      const cpf = row[2] ? row[2].trim() : "";
-      if (!name || !cpf) continue; // Skip empty rows
-
-      const id = row[0] && row[0].trim().startsWith("tr_") 
-        ? row[0].trim() 
-        : "tr_" + Math.random().toString(36).substring(2, 11);
-
-      const birthDateRaw = row[3] ? row[3].trim() : "";
-      let birthDate = "";
-      if (birthDateRaw) {
-        if (birthDateRaw.includes("/")) {
-          const parts = birthDateRaw.split("/");
-          if (parts.length === 3) {
-            birthDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-          }
-        } else if (birthDateRaw.includes("-")) {
-          birthDate = birthDateRaw;
-        }
-      }
-
-      const phone = row[4] ? row[4].trim() : "";
-      const email = row[5] ? row[5].trim().toLowerCase() : "";
-      const instagram = row[6] ? row[6].trim() : "";
-      const fideTitle = row[7] ? row[7].trim() : "Nenhuma";
-      const administrativeRegion = row[8] ? row[8].trim() : "";
-      
-      const pedagogical = row[9] ? row[9].trim().toLowerCase() === "sim" : false;
-      const highPerformance = row[10] ? row[10].trim().toLowerCase() === "sim" : false;
-
-      const availabilityRaw = row[11] ? row[11].trim() : "";
-      const availability: string[] = [];
-      if (availabilityRaw) {
-        const parts = availabilityRaw.split(",").map((s) => s.trim().toLowerCase());
-        if (parts.some((p) => p.includes("manhã") || p.includes("morning"))) availability.push("morning");
-        if (parts.some((p) => p.includes("tarde") || p.includes("afternoon"))) availability.push("afternoon");
-        if (parts.some((p) => p.includes("noite") || p.includes("night"))) availability.push("night");
-        if (parts.some((p) => p.includes("final") || p.includes("fim") || p.includes("fins") || p.includes("weekend") || p.includes("sábado") || p.includes("domingo"))) availability.push("weekend");
-      }
-
-      const bio = row[12] ? row[12].trim() : "";
-      const notes = row[13] ? row[13].trim() : "";
-      
-      const createdAtRaw = row[14] ? row[14].trim() : "";
-      let createdAt = new Date().toISOString();
-      if (createdAtRaw) {
-        if (createdAtRaw.includes("/")) {
-          const parts = createdAtRaw.split("/");
-          if (parts.length === 3) {
-            createdAt = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`).toISOString();
-          }
-        } else {
-          const parsed = Date.parse(createdAtRaw);
-          if (!isNaN(parsed)) {
-            createdAt = new Date(parsed).toISOString();
-          }
-        }
-      }
-
-      importedRegistrations.push({
-        id,
-        name,
-        cpf,
-        birthDate,
-        phone,
-        email,
-        instagram,
-        fideTitle,
-        specialties: {
-          pedagogical,
-          highPerformance
-        },
-        availability,
-        administrativeRegion,
-        bio,
-        notes,
-        createdAt
-      });
-    }
+    const importedRegistrations = await parseAndSyncSpreadsheet(spreadsheetId);
 
     if (importedRegistrations.length > 0) {
-      writeRegistrations(importedRegistrations);
-      console.log(`Importação concluída. ${importedRegistrations.length} registros salvos.`);
+      console.log(`Importação concluída via helper. ${importedRegistrations.length} registros salvos.`);
       return res.json({ 
         success: true, 
         count: importedRegistrations.length, 
@@ -474,6 +482,51 @@ router.post("/config/sync-from-sheet", authenticateAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("Erro na importação da planilha:", err);
     return res.status(500).json({ error: "Erro interno no servidor ao sincronizar.", details: err.message || err.toString() });
+  }
+});
+
+// GET /api/public-registrations - Expose safe registration columns for non-auth users (nome, telefone, local, titulacao, atuacao)
+router.get("/public-registrations", async (req, res) => {
+  try {
+    ensureConfigFile();
+    let spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || null;
+    
+    if (fs.existsSync(CONFIG_FILE)) {
+      try {
+        const data = fs.readFileSync(CONFIG_FILE, "utf-8");
+        const config = JSON.parse(data);
+        if (!spreadsheetId) spreadsheetId = config.spreadsheetId || null;
+      } catch (e) {}
+    }
+
+    // Try to sync from Google Sheets in the background/sync to bring newest data
+    if (spreadsheetId) {
+      try {
+        await parseAndSyncSpreadsheet(spreadsheetId);
+        console.log("Sincronização automática para acesso público realizada com sucesso.");
+      } catch (syncErr) {
+        console.error("Erro na sincronização em segundo plano para acesso público:", syncErr);
+        // Fallback gracefully without throwing
+      }
+    }
+
+    const registrations = readRegistrations();
+    
+    // Selectively map only safe public attributes (nome, telefone, local, titulacao, atuacao, availability)
+    const publicData = registrations.map((r) => ({
+      id: r.id,
+      name: r.name,
+      phone: r.phone,
+      administrativeRegion: r.administrativeRegion,
+      fideTitle: r.fideTitle,
+      specialties: r.specialties,
+      availability: r.availability,
+    }));
+
+    res.json(publicData);
+  } catch (error: any) {
+    console.error("Erro ao obter cadastros públicos:", error);
+    res.status(500).json({ error: "Erro ao buscar os profissionais do banco de talentos." });
   }
 });
 

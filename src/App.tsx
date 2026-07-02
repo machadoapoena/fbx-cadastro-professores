@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import TrainerForm from "./components/TrainerForm";
 import AdminPanel from "./components/AdminPanel";
+import PublicTalentBank from "./components/PublicTalentBank";
 import { Shield, ClipboardList, Crown, CheckCircle, ExternalLink } from "lucide-react";
 
 type ViewState = "form" | "success" | "admin";
@@ -11,6 +12,12 @@ export default function App() {
   const handleRegistrationSuccess = () => {
     setView("success");
   };
+
+  const isPublicPage = window.location.pathname === "/banco-de-talentos" || window.location.pathname === "/talentos";
+
+  if (isPublicPage) {
+    return <PublicTalentBank />;
+  }
 
   if (view === "admin") {
     return (
