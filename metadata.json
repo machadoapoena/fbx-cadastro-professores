@@ -1,0 +1,6 @@
+{
+  "name": "Cadastro de Instrutores FBX",
+  "description": "Formulário de cadastro e central de contatos de professores e treinadores de xadrez da Federação Brasiliense de Xadrez (FBX).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
