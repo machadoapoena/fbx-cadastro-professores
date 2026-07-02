@@ -512,16 +512,35 @@ router.get("/public-registrations", async (req, res) => {
 
     const registrations = readRegistrations();
     
-    // Selectively map only safe public attributes (nome, telefone, local, titulacao, atuacao, availability)
-    const publicData = registrations.map((r) => ({
-      id: r.id,
-      name: r.name,
-      phone: r.phone,
-      administrativeRegion: r.administrativeRegion,
-      fideTitle: r.fideTitle,
-      specialties: r.specialties,
-      availability: r.availability,
-    }));
+    // Selectively map only safe public attributes (nome, telefone, local, titulacao, atuacao, availability, email, instagram, bio, age)
+    const publicData = registrations.map((r) => {
+      let age: number | null = null;
+      if (r.birthDate) {
+        const birthDate = new Date(r.birthDate);
+        if (!isNaN(birthDate.getTime())) {
+          const today = new Date();
+          age = today.getFullYear() - birthDate.getFullYear();
+          const m = today.getMonth() - birthDate.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+        }
+      }
+
+      return {
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        email: r.email || "",
+        instagram: r.instagram || "",
+        administrativeRegion: r.administrativeRegion,
+        fideTitle: r.fideTitle,
+        specialties: r.specialties,
+        availability: r.availability,
+        bio: r.bio || "",
+        age: age,
+      };
+    });
 
     res.json(publicData);
   } catch (error: any) {
