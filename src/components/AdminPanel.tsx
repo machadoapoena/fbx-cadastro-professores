@@ -152,6 +152,10 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
   const [isSheetsLoading, setIsSheetsLoading] = useState(false);
   const [sheetsError, setSheetsError] = useState<string | null>(null);
   const [sheetsSuccess, setSheetsSuccess] = useState<string | null>(null);
+  
+  // Script connection test state
+  const [isTestingScript, setIsTestingScript] = useState(false);
+  const [scriptTestResult, setScriptTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Load token from localStorage on mount and init Firebase Auth
   useEffect(() => {
@@ -482,6 +486,48 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       setSheetsError(err.message || "Não foi possível salvar o URL.");
     } finally {
       setIsSheetsLoading(false);
+    }
+  };
+
+  const handleTestScriptConnection = async () => {
+    if (!googleScriptUrlInput.trim()) {
+      alert("Por favor, insira uma URL de Script para testar.");
+      return;
+    }
+    setIsTestingScript(true);
+    setScriptTestResult(null);
+    setSheetsError(null);
+    setSheetsSuccess(null);
+    try {
+      const response = await fetch("/api/config/test-sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ googleScriptUrl: googleScriptUrlInput.trim() })
+      });
+
+      const resData = await response.json();
+      if (response.ok && resData.success) {
+        setScriptTestResult({
+          success: true,
+          message: "Conexão de teste estabelecida com sucesso! O Google Apps Script processou a chamada e inseriu uma linha de teste na planilha."
+        });
+      } else {
+        setScriptTestResult({
+          success: false,
+          message: resData.error || resData.details || "O Google Apps Script retornou um erro ao processar os dados."
+        });
+      }
+    } catch (err: any) {
+      console.error("Test connection error:", err);
+      setScriptTestResult({
+        success: false,
+        message: err.message || "Falha ao se comunicar com o Google Apps Script. Verifique se o URL está correto e se foi implantado como público (Qualquer um)."
+      });
+    } finally {
+      setIsTestingScript(false);
     }
   };
 
@@ -1220,26 +1266,60 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   placeholder="Cole aqui a URL da Web App do Google Apps Script (https://script.google.com/.../exec)"
                   className="px-3 py-2 text-xs bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg flex-1 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-[#C5A880] focus:border-[#C5A880]"
                   value={googleScriptUrlInput}
-                  onChange={(e) => setGoogleScriptUrlInput(e.target.value)}
+                  onChange={(e) => {
+                    setGoogleScriptUrlInput(e.target.value);
+                    setScriptTestResult(null); // Clear test result on change
+                  }}
                 />
-                <button
-                  onClick={() => handleSaveGoogleScriptUrl(googleScriptUrlInput)}
-                  disabled={isSheetsLoading}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shrink-0"
-                >
-                  {isSheetsLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    "Salvar URL"
-                  )}
-                </button>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={handleTestScriptConnection}
+                    disabled={isTestingScript || !googleScriptUrlInput.trim()}
+                    className="px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer transition-all flex items-center justify-center gap-1 min-w-[100px]"
+                  >
+                    {isTestingScript ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      "Testar Conexão"
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleSaveGoogleScriptUrl(googleScriptUrlInput)}
+                    disabled={isSheetsLoading}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-all flex items-center justify-center min-w-[90px]"
+                  >
+                    {isSheetsLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      "Salvar URL"
+                    )}
+                  </button>
+                </div>
               </div>
+
+              {scriptTestResult && (
+                <div className={`text-xs border rounded-xl p-3 flex items-start gap-2 ${
+                  scriptTestResult.success 
+                    ? "text-emerald-800 bg-emerald-50/50 border-emerald-100" 
+                    : "text-red-700 bg-red-50/50 border-red-100"
+                }`}>
+                  {scriptTestResult.success ? (
+                    <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                  )}
+                  <div>
+                    <p className="font-bold">{scriptTestResult.success ? "Sucesso no Teste!" : "Erro na Conexão"}</p>
+                    <p className="mt-0.5 font-normal text-slate-600 leading-normal">{scriptTestResult.message}</p>
+                  </div>
+                </div>
+              )}
 
               {googleScriptUrl && (
                 <div className="text-xs text-slate-600 bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">

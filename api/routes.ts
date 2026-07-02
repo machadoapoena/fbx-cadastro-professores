@@ -284,6 +284,67 @@ router.post("/config", authenticateAdmin, (req, res) => {
   }
 });
 
+// Test Google Apps Script Web App connection (requires authentication)
+router.post("/config/test-sync", authenticateAdmin, async (req, res) => {
+  try {
+    const { googleScriptUrl } = req.body;
+    if (!googleScriptUrl) {
+      return res.status(400).json({ error: "URL do Google Script não fornecida." });
+    }
+
+    const testPayload = {
+      id: "TEST-123",
+      name: "Profissional de Teste (FBX)",
+      cpf: "000.000.000-00",
+      birthDate: "01/01/2026",
+      phone: "(00) 00000-0000",
+      email: "teste@fbx.com",
+      instagram: "@fbx_teste",
+      fideTitle: "Nenhuma",
+      administrativeRegion: "Brasília",
+      specialties: {
+        pedagogical: true,
+        highPerformance: false
+      },
+      availability: ["morning", "afternoon"],
+      bio: "Esta é uma linha de teste enviada automaticamente para validar a integração em tempo real.",
+      notes: "Sincronização configurada com sucesso!",
+      createdAt: new Date().toISOString()
+    };
+
+    console.log("Testando conexão com Google Apps Script:", googleScriptUrl);
+    
+    const syncRes = await fetch(googleScriptUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(testPayload)
+    });
+
+    if (syncRes.ok) {
+      const responseText = await syncRes.text();
+      return res.json({ 
+        success: true, 
+        message: "Conexão de teste bem-sucedida! Uma linha de teste foi adicionada à planilha.",
+        response: responseText
+      });
+    } else {
+      const errorText = await syncRes.text();
+      return res.status(syncRes.status).json({ 
+        error: `O Google Apps Script retornou status ${syncRes.status}`, 
+        details: errorText 
+      });
+    }
+  } catch (err: any) {
+    console.error("Erro ao testar sincronização:", err);
+    return res.status(500).json({ 
+      error: "Falha de rede ao conectar com o Google Apps Script.", 
+      details: err.message || err.toString() 
+    });
+  }
+});
+
 // Sync/Replace all registrations (requires authentication)
 router.post("/registrations/sync", authenticateAdmin, (req, res) => {
   try {
