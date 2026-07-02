@@ -6,28 +6,43 @@ import { TrainerRegistration } from "./src/types";
 
 const app = express();
 const PORT = 3000;
-const DATA_FILE = path.join(process.cwd(), "registrations.json");
-const CONFIG_FILE = path.join(process.cwd(), "config.json");
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "fbx2026";
 
-// Ensure data file exists with empty array
-if (!fs.existsSync(DATA_FILE)) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), "utf-8");
-    console.log("Initialized registrations.json");
-  } catch (error) {
-    console.error("Error creating registrations.json:", error);
+const isVercel = !!process.env.VERCEL;
+const BUNDLED_DATA_FILE = path.join(process.cwd(), "registrations.json");
+const BUNDLED_CONFIG_FILE = path.join(process.cwd(), "config.json");
+
+const DATA_FILE = isVercel ? path.join("/tmp", "registrations.json") : BUNDLED_DATA_FILE;
+const CONFIG_FILE = isVercel ? path.join("/tmp", "config.json") : BUNDLED_CONFIG_FILE;
+
+// Ensure DATA_FILE exists safely (especially in read-only Vercel environment)
+try {
+  if (!fs.existsSync(DATA_FILE)) {
+    if (isVercel && fs.existsSync(BUNDLED_DATA_FILE)) {
+      fs.copyFileSync(BUNDLED_DATA_FILE, DATA_FILE);
+      console.log("Copied bundled registrations.json to /tmp");
+    } else {
+      fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), "utf-8");
+      console.log("Initialized registrations.json");
+    }
   }
+} catch (error) {
+  console.error("Error setting up DATA_FILE:", error);
 }
 
-// Ensure config file exists with empty spreadsheetId
-if (!fs.existsSync(CONFIG_FILE)) {
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ spreadsheetId: null }, null, 2), "utf-8");
-    console.log("Initialized config.json");
-  } catch (error) {
-    console.error("Error creating config.json:", error);
+// Ensure CONFIG_FILE exists safely
+try {
+  if (!fs.existsSync(CONFIG_FILE)) {
+    if (isVercel && fs.existsSync(BUNDLED_CONFIG_FILE)) {
+      fs.copyFileSync(BUNDLED_CONFIG_FILE, CONFIG_FILE);
+      console.log("Copied bundled config.json to /tmp");
+    } else {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify({ spreadsheetId: null }, null, 2), "utf-8");
+      console.log("Initialized config.json");
+    }
   }
+} catch (error) {
+  console.error("Error setting up CONFIG_FILE:", error);
 }
 
 // Middleware for parsing JSON and URL-encoded bodies
@@ -259,4 +274,8 @@ async function start() {
   });
 }
 
-start();
+if (!isVercel) {
+  start();
+}
+
+export default app;
