@@ -14,7 +14,14 @@ interface AdminPanelProps {
   onBackToForm: () => void;
 }
 
-const googleScriptCode = `function doPost(e) {
+const googleScriptCode = `function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ 
+    "status": "online", 
+    "message": "Serviço de integração FBX ativo! Pronto para receber cadastros via requisições POST." 
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     var data = JSON.parse(e.postData.contents);
@@ -217,6 +224,7 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
         setToken(result.token);
         setIsAuthenticated(true);
         fetchRegistrations(result.token);
+        fetchGoogleConfig();
       } else {
         setLoginError(result.error || "Senha inválida.");
       }
