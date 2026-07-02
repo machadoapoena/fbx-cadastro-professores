@@ -193,12 +193,37 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
         setSpreadsheetId(config.spreadsheetId || null);
         setGoogleScriptUrl(config.googleScriptUrl || null);
         setGoogleScriptUrlInput(config.googleScriptUrl || "");
+        
+        if (config.spreadsheetId) {
+          setSpreadsheetName("Planilha Vinculada");
+        }
+
         const activeToken = gToken || googleToken;
         const activeFbxToken = fbxAuthToken || token;
+        
         if (config.spreadsheetId && activeToken) {
           fetchSpreadsheetDetails(config.spreadsheetId, activeToken);
-          if (activeFbxToken) {
-            autoSyncFromGoogleSheets(config.spreadsheetId, activeToken, activeFbxToken);
+        }
+
+        // Auto-sync using our backend sync-from-sheet route on load (requires only admin credentials, no Google auth)
+        if (config.spreadsheetId && activeFbxToken) {
+          try {
+            const syncRes = await fetch("/api/config/sync-from-sheet", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${activeFbxToken}`
+              }
+            });
+            if (syncRes.ok) {
+              const syncData = await syncRes.json();
+              if (syncData.success && syncData.registrations) {
+                setData(syncData.registrations);
+                console.log(`Auto-synchronized ${syncData.registrations.length} registrations on load.`);
+              }
+            }
+          } catch (autoErr) {
+            console.error("Auto sync on load failed:", autoErr);
           }
         }
       }
@@ -1573,15 +1598,27 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
 
               {/* Action Buttons to Export */}
               <div className="flex items-center gap-2 flex-wrap">
-                {googleToken && spreadsheetId && (
+                {spreadsheetId && (
                   <button
                     onClick={async () => {
                       setIsSheetsLoading(true);
                       setSheetsError(null);
                       setSheetsSuccess(null);
                       try {
-                        await autoSyncFromGoogleSheets(spreadsheetId, googleToken, token);
-                        setSheetsSuccess("Lista de talentos sincronizada com a planilha com sucesso!");
+                        const res = await fetch("/api/config/sync-from-sheet", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`
+                          }
+                        });
+                        const resData = await res.json();
+                        if (res.ok && resData.success) {
+                          setData(resData.registrations || []);
+                          setSheetsSuccess(resData.message || "Lista de talentos atualizada com a planilha com sucesso!");
+                        } else {
+                          throw new Error(resData.error || "Falha ao sincronizar.");
+                        }
                       } catch (err: any) {
                         setSheetsError(err.message || "Falha ao sincronizar.");
                       } finally {
