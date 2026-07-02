@@ -120,7 +120,7 @@ router.post("/admin/login", (req, res) => {
 });
 
 // Submit a new registration
-router.post("/register", (req, res) => {
+router.post("/register", async (req, res) => {
   try {
     const {
       name,
@@ -192,24 +192,20 @@ router.post("/register", (req, res) => {
 
         if (googleScriptUrl) {
           console.log("Enviando cadastro automático para o Google Sheets via Web App:", googleScriptUrl);
-          fetch(googleScriptUrl, {
+          const syncRes = await fetch(googleScriptUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
             body: JSON.stringify(newTrainer)
-          })
-          .then(async (syncRes) => {
-            if (syncRes.ok) {
-              console.log("Sincronização automática com Google Sheets concluída com sucesso!");
-            } else {
-              const text = await syncRes.text();
-              console.error("Falha na sincronização automática. Status:", syncRes.status, text);
-            }
-          })
-          .catch((fetchErr) => {
-            console.error("Erro na requisição de sincronização automática:", fetchErr);
           });
+          
+          if (syncRes.ok) {
+            console.log("Sincronização automática com Google Sheets concluída com sucesso!");
+          } else {
+            const text = await syncRes.text();
+            console.error("Falha na sincronização automática. Status:", syncRes.status, text);
+          }
         }
       } catch (syncErr) {
         console.error("Falha ao disparar sincronização automática:", syncErr);
