@@ -310,10 +310,10 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
         const availability: string[] = [];
         if (availabilityRaw) {
           const parts = availabilityRaw.split(",").map((s) => s.trim().toLowerCase());
-          if (parts.some((p) => p.includes("manhã"))) availability.push("morning");
-          if (parts.some((p) => p.includes("tarde"))) availability.push("afternoon");
-          if (parts.some((p) => p.includes("noite"))) availability.push("night");
-          if (parts.some((p) => p.includes("final") || p.includes("fim"))) availability.push("weekend");
+          if (parts.some((p) => p.includes("manhã") || p.includes("morning"))) availability.push("morning");
+          if (parts.some((p) => p.includes("tarde") || p.includes("afternoon"))) availability.push("afternoon");
+          if (parts.some((p) => p.includes("noite") || p.includes("night"))) availability.push("night");
+          if (parts.some((p) => p.includes("final") || p.includes("fim") || p.includes("fins") || p.includes("sábado") || p.includes("domingo") || p.includes("weekend"))) availability.push("weekend");
         }
 
         const bio = row[12] ? row[12].toString().trim() : "";
@@ -772,7 +772,7 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
         item.administrativeRegion,
         item.specialties.pedagogical ? "Sim" : "Não",
         item.specialties.highPerformance ? "Sim" : "Não",
-        item.availability.map(a => a === "morning" ? "Manhã" : a === "afternoon" ? "Tarde" : a === "night" ? "Noite" : "Finais de Semana").join(", "),
+        (item.availability || []).map(a => a === "morning" ? "Manhã" : a === "afternoon" ? "Tarde" : a === "night" ? "Noite" : "Finais de Semana").join(", "),
         item.bio || "",
         item.notes || "",
         item.createdAt ? new Date(item.createdAt).toLocaleDateString("pt-BR") : ""
@@ -888,10 +888,10 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
         const availability: string[] = [];
         if (availabilityRaw) {
           const parts = availabilityRaw.split(",").map((s) => s.trim().toLowerCase());
-          if (parts.some((p) => p.includes("manhã"))) availability.push("morning");
-          if (parts.some((p) => p.includes("tarde"))) availability.push("afternoon");
-          if (parts.some((p) => p.includes("noite"))) availability.push("night");
-          if (parts.some((p) => p.includes("final") || p.includes("fim"))) availability.push("weekend");
+          if (parts.some((p) => p.includes("manhã") || p.includes("morning"))) availability.push("morning");
+          if (parts.some((p) => p.includes("tarde") || p.includes("afternoon"))) availability.push("afternoon");
+          if (parts.some((p) => p.includes("noite") || p.includes("night"))) availability.push("night");
+          if (parts.some((p) => p.includes("final") || p.includes("fim") || p.includes("fins") || p.includes("sábado") || p.includes("domingo") || p.includes("weekend"))) availability.push("weekend");
         }
 
         const bio = row[12] ? row[12].toString().trim() : "";
@@ -1051,7 +1051,7 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       item.specialties.pedagogical ? "SIM" : "NÃO",
       item.specialties.highPerformance ? "SIM" : "NÃO",
       item.administrativeRegion,
-      item.availability.map(a => a === "morning" ? "Manhã" : a === "afternoon" ? "Tarde" : a === "night" ? "Noite" : "Fim de Semana").join(", "),
+      (item.availability || []).map(a => a === "morning" ? "Manhã" : a === "afternoon" ? "Tarde" : a === "night" ? "Noite" : "Fim de Semana").join(", "),
       item.bio || "-",
       item.notes || "-",
       new Date(item.createdAt).toLocaleDateString("pt-BR")
@@ -1090,7 +1090,7 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
       item.specialties.pedagogical ? "Sim" : "Não",
       item.specialties.highPerformance ? "Sim" : "Não",
       `"${item.administrativeRegion}"`,
-      `"${item.availability.map(a => a === "morning" ? "Manhã" : a === "afternoon" ? "Tarde" : a === "night" ? "Noite" : "Finais de Semana").join(", ")}"`,
+      `"${(item.availability || []).map(a => a === "morning" ? "Manhã" : a === "afternoon" ? "Tarde" : a === "night" ? "Noite" : "Finais de Semana").join(", ")}"`,
       `"${(item.bio || "").replace(/"/g, '""')}"`,
       `"${new Date(item.createdAt).toLocaleDateString("pt-BR")}"`
     ]);
@@ -1957,7 +1957,7 @@ export default function AdminPanel({ onBackToForm }: AdminPanelProps) {
                   <div>
                     <div className="font-semibold text-slate-400 uppercase tracking-wide text-[10px] mb-1.5">Disponibilidade de Horário</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {selectedTrainer.availability.map((av) => (
+                      {(selectedTrainer.availability || []).map((av) => (
                         <span key={av} className="px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-semibold flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-[#C5A880]" />
                           {av === "morning" ? "Manhã" : av === "afternoon" ? "Tarde" : av === "night" ? "Noite" : "Fins de Semana"}

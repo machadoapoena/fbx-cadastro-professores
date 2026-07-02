@@ -416,7 +416,7 @@ router.post("/config/sync-from-sheet", authenticateAdmin, async (req, res) => {
         if (parts.some((p) => p.includes("manhã") || p.includes("morning"))) availability.push("morning");
         if (parts.some((p) => p.includes("tarde") || p.includes("afternoon"))) availability.push("afternoon");
         if (parts.some((p) => p.includes("noite") || p.includes("night"))) availability.push("night");
-        if (parts.some((p) => p.includes("final") || p.includes("fim") || p.includes("weekend") || p.includes("sábado") || p.includes("domingo"))) availability.push("weekend");
+        if (parts.some((p) => p.includes("final") || p.includes("fim") || p.includes("fins") || p.includes("weekend") || p.includes("sábado") || p.includes("domingo"))) availability.push("weekend");
       }
 
       const bio = row[12] ? row[12].trim() : "";
