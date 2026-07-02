@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { 
   User, Mail, Phone, Instagram, Award, MapPin, 
   BookOpen, Trophy, Calendar, CheckCircle, ChevronRight, 
-  ChevronLeft, AlertCircle, FileText, Loader2, Sparkles
+  ChevronLeft, AlertCircle, FileText, Loader2, Sparkles, Info
 } from "lucide-react";
 import { REGIOES_ADMINISTRATIVAS } from "../utils/regions";
 
@@ -615,6 +615,17 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               />
+            </div>
+
+            {/* Public data privacy notice */}
+            <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-4 flex items-start gap-3 text-emerald-950 mt-4" id="privacy-disclosure-box">
+              <Info className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-bold text-xs text-emerald-900 block">Aviso Importante de Divulgação Pública</span>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  Ao concluir e enviar este cadastro, as informações de <strong>Nome Completo, Telefone de Contato, Região Administrativa (RA), Titulação FIDE e Áreas de Atuação</strong> ficarão disponíveis de forma pública no Banco de Talentos oficial da FBX para consulta de interessados. Dados privados como CPF, Data de Nascimento e E-mail continuarão sob guarda confidencial da FBX.
+                </p>
+              </div>
             </div>
           </div>
         )}

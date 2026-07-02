@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   Search, Phone, MapPin, BookOpen, Trophy, Loader2, 
-  ChevronDown, ExternalLink, RefreshCw, FileSpreadsheet, ShieldCheck
+  ChevronDown, ExternalLink, RefreshCw, FileSpreadsheet, ShieldCheck, Info
 } from "lucide-react";
 import { REGIOES_ADMINISTRATIVAS } from "../utils/regions";
 
@@ -118,6 +118,17 @@ export default function PublicTalentBank() {
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         
+        {/* Advisory banner for more info */}
+        <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3 text-amber-900" id="public-info-advisory">
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="font-bold text-sm text-amber-950">Precisa de mais informações sobre algum professor ou treinador?</h4>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              Caso queira obter informações detalhadas sobre a atuação, currículo ou referências de qualquer profissional credenciado, por favor entre em contato diretamente com a <strong>Federação Brasiliense de Xadrez (FBX)</strong>.
+            </p>
+          </div>
+        </div>
+
         {/* Table Filters Panel */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.01)] space-y-4" id="public-filters-container">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
