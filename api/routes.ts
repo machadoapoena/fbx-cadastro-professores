@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { TrainerRegistration } from "../src/types";
+import { TrainerRegistration } from "../src/types.js";
 
 const router = express.Router();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "fbx2026";
