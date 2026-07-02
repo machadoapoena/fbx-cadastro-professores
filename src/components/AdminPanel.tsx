@@ -15,6 +15,10 @@ interface AdminPanelProps {
 }
 
 const googleScriptCode = `function doGet(e) {
+  if (!e) {
+    return ContentService.createTextOutput("ATENÇÃO: Você executou a função doGet diretamente pelo editor do Google Apps Script. Isso é normal! Para testar o funcionamento real, você precisa implantar como 'App da Web' (Web App) e usar a URL gerada.")
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
   return ContentService.createTextOutput(JSON.stringify({ 
     "status": "online", 
     "message": "Serviço de integração FBX ativo! Pronto para receber cadastros via requisições POST." 
@@ -22,8 +26,36 @@ const googleScriptCode = `function doGet(e) {
 }
 
 function doPost(e) {
+  if (!e || !e.postData || !e.postData.contents) {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      "result": "error", 
+      "error": "Nenhum dado recebido. Se você clicou em 'Executar' no editor do Apps Script, isto é normal porque o editor não envia dados. O script deve ser chamado pelo aplicativo principal via POST." 
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    
+    // Se a planilha estiver vazia, adiciona o cabeçalho automaticamente
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "ID",
+        "Nome",
+        "CPF",
+        "Data de Nascimento",
+        "Telefone",
+        "E-mail",
+        "Instagram",
+        "Título FIDE",
+        "Região Administrativa",
+        "Pedagógico",
+        "Alto Rendimento",
+        "Disponibilidade",
+        "Biografia",
+        "Observações",
+        "Data de Cadastro"
+      ]);
+    }
+
     var data = JSON.parse(e.postData.contents);
     
     // Extrai os campos do profissional
