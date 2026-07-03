@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { 
   Search, Phone, MapPin, BookOpen, Trophy, Loader2, 
   ChevronDown, ExternalLink, RefreshCw, FileSpreadsheet, ShieldCheck, Info,
-  Eye, X, Mail, Instagram
+  Eye, X, Mail, Instagram, Calendar
 } from "lucide-react";
 import { REGIOES_ADMINISTRATIVAS } from "../utils/regions";
 
@@ -433,15 +433,15 @@ export default function PublicTalentBank() {
       {/* Public Trainer Details Modal */}
       {selectedTrainer && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="public-details-modal">
-          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
             {/* Modal Header */}
             <div className="bg-[#0f172a] text-white px-6 py-5 flex items-center justify-between border-b border-slate-800 relative">
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-slate-900 via-[#C5A880] to-slate-900" />
               <div>
-                <span className="text-[9px] uppercase tracking-wider text-[#C5A880] font-mono font-bold block mb-1">
+                <span className="text-[10px] uppercase tracking-wider text-[#C5A880] font-mono font-bold block mb-1">
                   Ficha do Profissional Credenciado
                 </span>
-                <h3 className="text-lg font-serif font-bold text-white">{selectedTrainer.name}</h3>
+                <h3 className="text-xl md:text-2xl font-serif font-bold text-white">{selectedTrainer.name}</h3>
               </div>
               <button
                 onClick={() => setSelectedTrainer(null)}
@@ -452,14 +452,14 @@ export default function PublicTalentBank() {
             </div>
 
             {/* Modal Scrollable Content */}
-            <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-700">
+            <div className="p-6 overflow-y-auto space-y-6 text-sm text-slate-700">
               
               {/* Core details / Badges */}
               <div className="flex flex-wrap gap-2 items-center">
-                <span className="inline-flex items-center text-[10px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md font-mono font-bold border border-emerald-100">
+                <span className="inline-flex items-center text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-md font-mono font-bold border border-emerald-100">
                   ✓ Credenciado FBX
                 </span>
-                <span className={`inline-flex items-center text-[10px] px-2.5 py-1 rounded-md font-mono font-bold ${
+                <span className={`inline-flex items-center text-xs px-3 py-1.5 rounded-md font-mono font-bold ${
                   selectedTrainer.fideTitle === "Nenhuma" 
                     ? "bg-slate-100 text-slate-600 border border-slate-200" 
                     : "bg-[#C5A880]/10 text-[#C5A880] border border-[#C5A880]/30"
@@ -467,39 +467,39 @@ export default function PublicTalentBank() {
                   🏆 FIDE: {selectedTrainer.fideTitle}
                 </span>
                 {selectedTrainer.age !== null && selectedTrainer.age !== undefined && (
-                  <span className="inline-flex items-center text-[10px] text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md font-mono font-bold border border-indigo-100">
-                    🎂 Idade: {selectedTrainer.age} anos
+                  <span className="inline-flex items-center gap-1.5 text-xs text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-md font-mono font-bold border border-indigo-100">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-500" /> Idade: {selectedTrainer.age} anos
                   </span>
                 )}
               </div>
 
               {/* Contact Info Group */}
-              <div className="space-y-3 bg-slate-50/60 border border-slate-100 p-4 rounded-2xl">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 font-mono">Canais de Contato</h4>
+              <div className="space-y-4 bg-slate-50/60 border border-slate-100 p-5 rounded-2xl">
+                <h4 className="font-bold text-sm uppercase tracking-wider text-slate-500 font-mono">Canais de Contato</h4>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-slate-700">
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-slate-700">
+                  <div className="flex items-center gap-2.5">
+                    <Phone className="w-5 h-5 text-emerald-600 shrink-0" />
                     <div>
-                      <div className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-semibold">WhatsApp / Celular</div>
-                      <div className="font-mono font-semibold text-slate-950">{selectedTrainer.phone}</div>
+                      <div className="text-[11px] uppercase tracking-wider text-slate-400 font-mono font-semibold">WhatsApp / Celular</div>
+                      <div className="font-mono font-bold text-base text-slate-950">{selectedTrainer.phone}</div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
+                  <div className="flex items-center gap-2.5">
+                    <MapPin className="w-5 h-5 text-slate-500 shrink-0" />
                     <div>
-                      <div className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-semibold">Região Administrativa (RA)</div>
-                      <div className="font-medium text-slate-950">{selectedTrainer.administrativeRegion}</div>
+                      <div className="text-[11px] uppercase tracking-wider text-slate-400 font-mono font-semibold">Região Administrativa (RA)</div>
+                      <div className="font-semibold text-base text-slate-950">{selectedTrainer.administrativeRegion}</div>
                     </div>
                   </div>
 
                   {selectedTrainer.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-[#C5A880] shrink-0" />
+                    <div className="flex items-center gap-2.5">
+                      <Mail className="w-5 h-5 text-[#C5A880] shrink-0" />
                       <div className="overflow-hidden">
-                        <div className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-semibold">E-mail</div>
-                        <div className="font-mono font-semibold text-slate-950 truncate" title={selectedTrainer.email}>
+                        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-mono font-semibold">E-mail</div>
+                        <div className="font-mono font-bold text-base text-slate-950 truncate" title={selectedTrainer.email}>
                           {selectedTrainer.email}
                         </div>
                       </div>
@@ -507,19 +507,19 @@ export default function PublicTalentBank() {
                   )}
 
                   {selectedTrainer.instagram && (
-                    <div className="flex items-center gap-2">
-                      <Instagram className="w-4 h-4 text-pink-600 shrink-0" />
+                    <div className="flex items-center gap-2.5">
+                      <Instagram className="w-5 h-5 text-pink-600 shrink-0" />
                       <div>
-                        <div className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-semibold">Instagram</div>
+                        <div className="text-[11px] uppercase tracking-wider text-slate-400 font-mono font-semibold">Instagram</div>
                         <div>
                           <a
                             href={`https://instagram.com/${selectedTrainer.instagram.replace("@", "")}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-medium text-pink-700 hover:underline inline-flex items-center gap-0.5"
+                            className="font-bold text-base text-pink-700 hover:underline inline-flex items-center gap-0.5"
                           >
                             {selectedTrainer.instagram.startsWith("@") ? "" : "@"}{selectedTrainer.instagram}
-                            <ExternalLink className="w-2.5 h-2.5" />
+                            <ExternalLink className="w-3 h-3" />
                           </a>
                         </div>
                       </div>
@@ -530,8 +530,8 @@ export default function PublicTalentBank() {
 
               {/* Bio / Resumo */}
               <div className="space-y-2">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 font-mono">Minibiografia / Perfil</h4>
-                <p className="text-slate-800 leading-relaxed bg-white border border-slate-200 p-4 rounded-2xl italic whitespace-pre-line">
+                <h4 className="font-bold text-sm uppercase tracking-wider text-slate-500 font-mono">Minibiografia / Perfil</h4>
+                <p className="text-base text-slate-800 leading-relaxed bg-white border border-slate-200 p-5 rounded-2xl italic whitespace-pre-line">
                   {selectedTrainer.bio.trim() || "Nenhuma biografia fornecida por este profissional."}
                 </p>
               </div>
@@ -539,31 +539,31 @@ export default function PublicTalentBank() {
               {/* Areas of Expertise / Availability */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Expertise */}
-                <div className="space-y-2">
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 font-mono">Áreas de Atuação</h4>
+                <div className="space-y-3">
+                  <h4 className="font-bold text-sm uppercase tracking-wider text-slate-500 font-mono">Áreas de Atuação</h4>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 bg-white border border-slate-100 p-2.5 rounded-xl">
-                      <div className={`w-2 h-2 rounded-full ${selectedTrainer.specialties.pedagogical ? "bg-emerald-500" : "bg-slate-300"}`} />
+                    <div className="flex items-center gap-3 bg-white border border-slate-100 p-3 rounded-xl">
+                      <div className={`w-2.5 h-2.5 rounded-full ${selectedTrainer.specialties.pedagogical ? "bg-emerald-500" : "bg-slate-300"}`} />
                       <div>
-                        <span className="font-bold text-slate-800 text-[11px] block">Xadrez Pedagógico / Escolar</span>
-                        <span className="text-[10px] text-slate-400">{selectedTrainer.specialties.pedagogical ? "Habilitado" : "Não focado"}</span>
+                        <span className="font-bold text-slate-800 text-xs block">Xadrez Pedagógico / Escolar</span>
+                        <span className="text-[11px] text-slate-400">{selectedTrainer.specialties.pedagogical ? "Habilitado" : "Não focado"}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 bg-white border border-slate-100 p-2.5 rounded-xl">
-                      <div className={`w-2 h-2 rounded-full ${selectedTrainer.specialties.highPerformance ? "bg-amber-500" : "bg-slate-300"}`} />
+                    <div className="flex items-center gap-3 bg-white border border-slate-100 p-3 rounded-xl">
+                      <div className={`w-2.5 h-2.5 rounded-full ${selectedTrainer.specialties.highPerformance ? "bg-amber-500" : "bg-slate-300"}`} />
                       <div>
-                        <span className="font-bold text-slate-800 text-[11px] block">Alto Rendimento / Competição</span>
-                        <span className="text-[10px] text-slate-400">{selectedTrainer.specialties.highPerformance ? "Habilitado" : "Não focado"}</span>
+                        <span className="font-bold text-slate-800 text-xs block">Alto Rendimento / Competição</span>
+                        <span className="text-[11px] text-slate-400">{selectedTrainer.specialties.highPerformance ? "Habilitado" : "Não focado"}</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Availability */}
-                <div className="space-y-2">
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 font-mono">Disponibilidade</h4>
-                  <div className="flex flex-wrap gap-1.5">
+                <div className="space-y-3">
+                  <h4 className="font-bold text-sm uppercase tracking-wider text-slate-500 font-mono">Disponibilidade</h4>
+                  <div className="flex flex-wrap gap-2">
                     {['morning', 'afternoon', 'night', 'weekend'].map((period) => {
                       const isAvailable = selectedTrainer.availability.includes(period);
                       const labels: Record<string, string> = {
@@ -575,7 +575,7 @@ export default function PublicTalentBank() {
                       return (
                         <span
                           key={period}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold border ${
                             isAvailable 
                               ? "bg-[#C5A880]/10 text-[#C5A880] border-[#C5A880]/30" 
                               : "bg-slate-50 text-slate-400 border-slate-100 line-through opacity-60"
@@ -590,8 +590,8 @@ export default function PublicTalentBank() {
               </div>
 
               {/* Footnote advisory in modal */}
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 flex items-start gap-2 text-[10px] text-slate-500">
-                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 flex items-start gap-2.5 text-xs text-slate-500">
+                <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                 <p className="leading-normal">
                   Este cadastro é gerido diretamente pela Federação Brasiliense de Xadrez. Para consultar referências formais ou obter mais informações detalhadas sobre este profissional, por favor entre em contato diretamente com a FBX.
                 </p>
@@ -603,7 +603,7 @@ export default function PublicTalentBank() {
             <div className="bg-slate-50 px-6 py-4 border-t border-slate-200/80 flex items-center justify-end gap-3">
               <button
                 onClick={() => setSelectedTrainer(null)}
-                className="px-4 py-2 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                className="px-5 py-2.5 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors cursor-pointer"
               >
                 Fechar
               </button>
@@ -611,9 +611,9 @@ export default function PublicTalentBank() {
                 href={`https://wa.me/55${selectedTrainer.phone.replace(/\D/g, "")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-sm"
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer shadow-sm"
               >
-                <Phone className="w-3.5 h-3.5" />
+                <Phone className="w-4 h-4" />
                 Chamar no WhatsApp
               </a>
             </div>
