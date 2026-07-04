@@ -100,15 +100,30 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
     setFormData({ ...formData, availability: current });
   };
 
+  // Safe Scroll Helper to prevent crashes in sandboxed iframes or older browsers
+  const safeScrollToTop = () => {
+    try {
+      if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    } catch (e) {
+      try {
+        window.scrollTo(0, 0);
+      } catch (err) {
+        console.warn("Scrolling is not supported or is blocked by the environment", err);
+      }
+    }
+  };
+
   // Validations per step
   const validateStep = () => {
     setErrorMsg(null);
     if (step === 1) {
-      if (!formData.name.trim()) {
+      if (!(formData.name || "").trim()) {
         setErrorMsg("Por favor, insira o nome completo.");
         return false;
       }
-      const cpfDigits = formData.cpf.replace(/\D/g, "");
+      const cpfDigits = (formData.cpf || "").replace(/\D/g, "");
       if (cpfDigits.length !== 11) {
         setErrorMsg("Por favor, insira um CPF válido (11 dígitos).");
         return false;
@@ -117,12 +132,12 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
         setErrorMsg("Por favor, insira sua data de nascimento.");
         return false;
       }
-      const phoneDigits = formData.phone.replace(/\D/g, "");
+      const phoneDigits = (formData.phone || "").replace(/\D/g, "");
       if (phoneDigits.length < 10 || phoneDigits.length > 11) {
         setErrorMsg("Por favor, insira um telefone de contato válido com DDD.");
         return false;
       }
-      if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      if (!(formData.email || "").trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || "")) {
         setErrorMsg("Por favor, insira um endereço de e-mail válido.");
         return false;
       }
@@ -136,7 +151,7 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
         setErrorMsg("Por favor, selecione sua Região Administrativa de atuação.");
         return false;
       }
-      if (formData.availability.length === 0) {
+      if ((formData.availability || []).length === 0) {
         setErrorMsg("Por favor, indique pelo menos um período de disponibilidade de horário.");
         return false;
       }
@@ -145,16 +160,25 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
   };
 
   const nextStep = () => {
-    if (validateStep()) {
-      setStep((prev) => prev + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    try {
+      if (validateStep()) {
+        setStep((prev) => prev + 1);
+        safeScrollToTop();
+      }
+    } catch (err: any) {
+      console.error("Error in nextStep:", err);
+      setErrorMsg("Ocorreu um erro ao avançar. Por favor, recarregue a página.");
     }
   };
 
   const prevStep = () => {
-    setErrorMsg(null);
-    setStep((prev) => prev - 1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    try {
+      setErrorMsg(null);
+      setStep((prev) => prev - 1);
+      safeScrollToTop();
+    } catch (err: any) {
+      console.error("Error in prevStep:", err);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -526,7 +550,7 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
                 id="bio-input"
                 rows={3}
                 placeholder="Exemplo: Professor na rede pública há 5 anos, campeão brasiliense sub-20 em 2018, coordeno oficina de xadrez na RA de Taguatinga..."
-                className="block w-full px-3.5 py-2.5 bg-slate-55 border border-slate-200 hover:border-slate-300 focus:bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#C5A880] focus:border-[#C5A880] transition-all text-sm"
+                className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#C5A880] focus:border-[#C5A880] transition-all text-sm"
                 value={formData.bio}
                 onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
               />
@@ -611,7 +635,7 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
                 id="notes-input"
                 rows={2}
                 placeholder="Exemplo: Tenho maior facilidade de locomoção se for próximo a estações de metrô. Posso dar aulas em escolas particulares às terças-feiras..."
-                className="block w-full px-3.5 py-2.5 bg-slate-55 border border-slate-200 hover:border-slate-300 focus:bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#C5A880] focus:border-[#C5A880] transition-all text-sm"
+                className="block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#C5A880] focus:border-[#C5A880] transition-all text-sm"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               />
