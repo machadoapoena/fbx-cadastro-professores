@@ -80,17 +80,18 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
   };
 
   const toggleSpecialty = (key: "pedagogical" | "highPerformance") => {
+    const currentSpecialties = formData.specialties || { pedagogical: false, highPerformance: false };
     setFormData({
       ...formData,
       specialties: {
-        ...formData.specialties,
-        [key]: !formData.specialties[key],
+        ...currentSpecialties,
+        [key]: !currentSpecialties[key],
       },
     });
   };
 
   const toggleAvailability = (time: string) => {
-    const current = [...formData.availability];
+    const current = [...(formData.availability || [])];
     const index = current.indexOf(time);
     if (index > -1) {
       current.splice(index, 1);
@@ -142,7 +143,7 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
         return false;
       }
     } else if (step === 2) {
-      if (!formData.specialties.pedagogical && !formData.specialties.highPerformance) {
+      if (!formData.specialties?.pedagogical && !formData.specialties?.highPerformance) {
         setErrorMsg("Selecione pelo menos uma área de atuação (Xadrez Pedagógico ou Alto Rendimento).");
         return false;
       }
@@ -183,6 +184,10 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (step < 3) {
+      nextStep();
+      return;
+    }
     if (!validateStep()) return;
 
     setLoading(true);
@@ -226,6 +231,9 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
     "Mestre FIDE (FM)",
     "Mestre Internacional (IM)",
     "Grande Mestre (GM)",
+    "Mestre Nacional (WNM)",
+    "Mestre Internacional (WIM)",
+    "Mestre FIDE (WFM)" 
   ];
 
   return (
@@ -485,13 +493,13 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
                 <div 
                   onClick={() => toggleSpecialty("pedagogical")}
                   className={`p-4 border rounded-xl cursor-pointer transition-all flex items-start gap-3 select-none ${
-                    formData.specialties.pedagogical 
+                    formData.specialties?.pedagogical 
                       ? "border-[#C5A880] bg-[#C5A880]/5 ring-1 ring-[#C5A880] shadow-[0_4px_12px_rgba(197,168,128,0.05)]" 
                       : "border-slate-200 hover:border-slate-300 bg-slate-50/50 hover:bg-slate-50"
                   }`}
                   id="specialty-pedagogical"
                 >
-                  <div className={`mt-0.5 rounded-full p-2 shrink-0 ${formData.specialties.pedagogical ? "bg-[#C5A880] text-slate-950" : "bg-slate-100 text-slate-600"}`}>
+                  <div className={`mt-0.5 rounded-full p-2 shrink-0 ${formData.specialties?.pedagogical ? "bg-[#C5A880] text-slate-950" : "bg-slate-100 text-slate-600"}`}>
                     <BookOpen className="w-4 h-4" />
                   </div>
                   <div className="space-y-1">
@@ -500,7 +508,7 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
                       <input 
                         type="checkbox" 
                         className="sr-only"
-                        checked={formData.specialties.pedagogical}
+                        checked={!!formData.specialties?.pedagogical}
                         readOnly
                       />
                     </div>
@@ -514,13 +522,13 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
                 <div 
                   onClick={() => toggleSpecialty("highPerformance")}
                   className={`p-4 border rounded-xl cursor-pointer transition-all flex items-start gap-3 select-none ${
-                    formData.specialties.highPerformance 
+                    formData.specialties?.highPerformance 
                       ? "border-[#C5A880] bg-[#C5A880]/5 ring-1 ring-[#C5A880] shadow-[0_4px_12px_rgba(197,168,128,0.05)]" 
                       : "border-slate-200 hover:border-slate-300 bg-slate-50/50 hover:bg-slate-50"
                   }`}
                   id="specialty-highperformance"
                 >
-                  <div className={`mt-0.5 rounded-full p-2 shrink-0 ${formData.specialties.highPerformance ? "bg-[#C5A880] text-slate-950" : "bg-slate-100 text-slate-600"}`}>
+                  <div className={`mt-0.5 rounded-full p-2 shrink-0 ${formData.specialties?.highPerformance ? "bg-[#C5A880] text-slate-950" : "bg-slate-100 text-slate-600"}`}>
                     <Trophy className="w-4 h-4" />
                   </div>
                   <div className="space-y-1">
@@ -529,7 +537,7 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
                       <input 
                         type="checkbox" 
                         className="sr-only"
-                        checked={formData.specialties.highPerformance}
+                        checked={!!formData.specialties?.highPerformance}
                         readOnly
                       />
                     </div>
@@ -605,7 +613,7 @@ export default function TrainerForm({ onSuccess }: TrainerFormProps) {
               
               <div className="grid grid-cols-2 gap-3" id="availability-grid">
                 {AVAILABILITY_OPTIONS.map((opt) => {
-                  const isSelected = formData.availability.includes(opt.id);
+                  const isSelected = (formData.availability || []).includes(opt.id);
                   return (
                     <button
                       key={opt.id}
